@@ -1,0 +1,70 @@
+{
+  "name": "figflow",
+  "version": "0.1.0",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/getevorion/figflow.git"
+  },
+  "scripts": {
+    "dev": "next dev --webpack",
+    "dev:turbo": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "fig:inspect": "tsx scripts/fig-inspect.ts",
+    "fig:render": "tsx scripts/fig-render.ts",
+    "fig:tree": "tsx scripts/fig-tree.ts"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.8.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@wasm-fmt/clang-format": "^23.1.1",
+    "class-variance-authority": "^0.7.1",
+    "cmdk": "^1.1.1",
+    "cn": "^0.4.0",
+    "fflate": "^0.8.3",
+    "fzstd": "^0.1.1",
+    "kiwi-schema": "^0.5.0",
+    "lenis": "^1.3.26",
+    "lucide-react": "^1.48.0",
+    "motion": "^13.4.6",
+    "next": "16.3.7",
+    "ogl": "^1.0.11",
+    "opentype.js": "^2.0.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-resizable-panels": "^4.14.1",
+    "server-only": "^0.0.1",
+    "shadcn": "^4.21.0",
+    "sharp": "^0.35.5",
+    "shiki": "^4.4.3",
+    "simple-icons": "^16.33.0",
+    "sonner": "^2.0.8",
+    "tsx": "^4.23.15",
+    "tw-animate-css": "^1.4.0",
+    "ulid": "^3.0.2",
+    "yazl": "^3.3.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^24.19.0",
+    "@types/opentype.js": "^1.3.10",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/yazl": "^3.3.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.7",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^5.0.2"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}
