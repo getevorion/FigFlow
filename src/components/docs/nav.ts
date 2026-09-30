@@ -3,11 +3,11 @@ export type DocPage = { href: string; title: string };
 /** The docs, in reading order. */
 export const docsNav: Array<{ title: string; pages: DocPage[] }> = [
   {
-    title: "Getting started",
+    title: "Start here",
     pages: [
-      { href: "/docs", title: "Introduction" },
-      { href: "/docs/export", title: "Export your .fig file" },
-      { href: "/docs/convert", title: "Convert and download" },
+      { href: "/docs", title: "Overview" },
+      { href: "/docs/export", title: "Getting your .fig" },
+      { href: "/docs/convert", title: "Using the converter" },
     ],
   },
   {

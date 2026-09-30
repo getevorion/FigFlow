@@ -4,10 +4,10 @@
 
 <h1 align="center">Figflow</h1>
 
-<p align="center"><strong>Figma to Dear ImGui, free and open source.</strong><br />Upload a <code>.fig</code> file and download a C++ project that looks like your design and already works: real widgets, every screen, popups and toasts.</p>
+<p align="center"><strong>Figma to Dear ImGui, free and open source.</strong><br />Give it a <code>.fig</code> and get back a Dear ImGui project in C++: real widgets, every screen, popups and toasts, ready to build.</p>
 
 <p align="center">
-  <img src=".github/assets/hero.webp" alt="The Figflow website: your Figma frame, running in Dear ImGui" width="880" />
+  <img src=".github/assets/hero.webp" alt="The Figflow website: draw it in Figma, ship it in Dear ImGui" width="880" />
 </p>
 
 ## Why Figflow
@@ -17,7 +17,7 @@ You shouldn't be overcharged to turn your own design into code. Figflow does the
 - **Fast.** An 8-screen menu with 156 controls converts in about two seconds, fonts and images included.
 - **Capable.** It converts every screen of the design, not one frame at a time. Prototype links become navigation. Toggles, checkboxes, radios, sliders, drop-downs, key binds, text fields, buttons and tab bars are found by how they look and work in the app. Text keeps Figma's own glyphs, baselines and kerning.
 - **Easy to run.** `npm install`, `npm run dev`, drop a `.fig` in the browser. The ZIP builds in Visual Studio 2022 or with CMake as it is.
-- **Code you'd write yourself.** The project reads the way a professional ImGui developer structures one, not as a wall of draw calls. Details [below](#what-you-get).
+- **Organised like a hand-built project.** It's structured the way a professional ImGui developer would set it up, not as a wall of draw calls. Details [below](#what-you-get).
 
 ## From design to running app
 

@@ -21,12 +21,12 @@ export function HowItWorks() {
   return (
     <section id="how-it-works" className="relative scroll-mt-10 py-24">
       <div className="mx-auto max-w-6xl px-5">
-        <SectionHeading eyebrow="How it works" icon={WorkflowIcon} title="Three steps. No setup.">
-          No installs, no API tokens, no renaming layers.
+        <SectionHeading eyebrow="How it works" icon={WorkflowIcon} title="From file to build in a minute.">
+          Nothing to install, no API token, no layers to rename.
         </SectionHeading>
 
         <div className="mt-12 grid gap-5 md:grid-cols-3">
-          <StepCard n="01" title="Save a local copy" body="In Figma, choose File → Save local copy. The .fig holds every layer, font and image." delay={0}>
+          <StepCard n="01" title="Grab the .fig" body="Figma's File → Save local copy… gives you one file with every layer, font and image in it." delay={0}>
             <div className="bezel bezel-sm w-[228px]">
               <div className="window p-1.5 text-[12px]">
                 {["New design file", "Open…", "Save local copy…", "Save to version history", "Export…"].map((item) => (
@@ -46,7 +46,7 @@ export function HowItWorks() {
             </div>
           </StepCard>
 
-          <StepCard n="02" title="Upload it, pick a frame" body="Choose where to start. Linked screens, pages and popups are found for you." delay={0.08} sky>
+          <StepCard n="02" title="Drop it in" body="Figflow finds the screen your app opens on, every other screen, and the popups and toasts they use." delay={0.08} sky>
             <div className="bezel bezel-sm w-full max-w-[272px]">
               <div className="window p-3">
                 <div className="flex items-center gap-2 rounded-lg border border-dashed border-white/20 bg-white/[0.04] px-3 py-2">
@@ -72,7 +72,7 @@ export function HowItWorks() {
             </div>
           </StepCard>
 
-          <StepCard n="03" title="Download the project" body="Check the preview and the code, then build it in Visual Studio." delay={0.16}>
+          <StepCard n="03" title="Build and run" body="Look over the preview and the code, then build the ZIP in Visual Studio 2022 or with CMake." delay={0.16}>
             <div className="bezel bezel-sm w-full max-w-[260px]">
               <div className="window p-3">
                 <div className="font-mono text-[11.5px] leading-6 text-[#b4b5c3]">

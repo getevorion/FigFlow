@@ -9,9 +9,9 @@ import { uploadView } from "@/server/views";
 export const metadata = { title: "Convert a Figma file" };
 
 const steps = [
-  { icon: FileCode2Icon, title: "Save a local copy", body: "In Figma, File → Save local copy… gives you the .fig with every layer, font and image." },
-  { icon: WandSparklesIcon, title: "Figflow converts it", body: "It finds the frame your app starts on, and the screens, popups and toasts its buttons lead to." },
-  { icon: FolderDownIcon, title: "Download the project", body: "A Visual Studio and CMake project for Dear ImGui 1.92, ready to build." },
+  { icon: FileCode2Icon, title: "Grab the .fig", body: "Figma's File → Save local copy… gives you one file with every layer, font and image in it." },
+  { icon: WandSparklesIcon, title: "Drop it in", body: "Figflow finds the screen your app opens on, every other screen, and the popups and toasts they use." },
+  { icon: FolderDownIcon, title: "Build and run", body: "The ZIP opens in Visual Studio 2022 or builds with CMake. Dear ImGui 1.92 is included." },
 ];
 
 export default async function ConvertPage() {
@@ -28,10 +28,10 @@ export default async function ConvertPage() {
             <SparklesIcon aria-hidden /> Convert
           </span>
           <h1 className="mt-3.5 text-[2rem] leading-[1.08] font-semibold tracking-[-0.035em] text-balance sm:text-[2.6rem]">
-            From Figma to a <span className="text-brand-gradient font-serif font-normal tracking-[-0.01em] italic">working</span> Dear ImGui app.
+            Turn a <span className="text-brand-gradient font-serif font-normal tracking-[-0.01em] italic">.fig</span> into Dear ImGui.
           </h1>
           <p className="mx-auto mt-4 max-w-md text-[14.5px] leading-relaxed text-pretty text-muted-foreground">
-            Drop in a .fig and download a C++ project that looks like the design and already works. Figflow does the rest.
+            Give Figflow your design file and it writes the C++: widgets, screens, popups and toasts, ready to build.
           </p>
         </div>
 

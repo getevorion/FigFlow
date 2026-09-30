@@ -3,11 +3,11 @@
 export const site = {
   name: "Figflow",
   tagline: "Figma to Dear ImGui",
-  description: "Your Figma frame, as a working Dear ImGui app.",
+  description: "Figma designs in, readable Dear ImGui C++ out.",
   retentionHours: 2,
   maxUploadMb: 512,
   /** Figflow is open source: the repository. */
-  sourceUrl: "https://github.com/getevorion/figflow",
+  sourceUrl: "https://github.com/getevorion/FigFlow",
 } as const;
 
 /** The project's owner and maintainer. */
@@ -32,39 +32,39 @@ export const nav = [
 
 export const faq: Array<{ q: string; a: string }> = [
   {
-    q: "Is Figflow free?",
-    a: "Yes. Figflow is an open-source community project: no plans, no license keys, and the code it generates is yours.",
+    q: "How much does Figflow cost?",
+    a: "Nothing. It's free and open source: no plans, no license keys, and the code you generate is yours to change, ship and sell.",
   },
   {
-    q: "What file do I upload?",
-    a: "The .fig from File → Save local copy in Figma. It holds every layer, font and image, so no Figma login or API token is needed.",
+    q: "Can I run Figflow myself?",
+    a: "Yes. It's a Next.js app with a small C++ runtime. Clone the repository, run npm install and npm run dev, and convert on your own machine.",
   },
   {
-    q: "What do I get back?",
-    a: "A C++20 project for Dear ImGui 1.92 with a Visual Studio solution and a CMakeLists.txt, for Win32 and DirectX 11, with every dependency included.",
+    q: "Where does the .fig come from?",
+    a: "Figma's File menu: Save local copy… writes the whole design to one file, layers, fonts and images included. No Figma login or API token is involved.",
   },
   {
-    q: "Is the code really readable?",
-    a: "Yes. One file per widget kind, your components as C++ components, one file per screen, and a theme named after your Figma styles and variables.",
+    q: "Which platform does the project target?",
+    a: "Windows. You get a C++20 project on Dear ImGui 1.92 with Win32 and DirectX 11, a Visual Studio 2022 solution and a CMakeLists.txt. Everything it needs is in the ZIP.",
   },
   {
-    q: "Will it look like my design?",
-    a: "It uses the design's own values: glyph positions, per-corner radii, strokes, gradients, shadows, masks and images, drawn by Dear ImGui itself.",
+    q: "How is the code organised?",
+    a: "Widgets in ui/components, one file per screen, popup and toast, a single State struct for the app's data, and a theme generated from your Figma styles and variables.",
   },
   {
-    q: "Which parts become working controls?",
-    a: "Buttons, sidebar items, toggles, checkboxes, radio buttons, sliders, text fields, dropdowns and keybinds, recognized by how they look. Hover, pressed and disabled states come from your variants.",
+    q: "What turns into a widget?",
+    a: "Buttons, nav items, tab bars, toggles, checkboxes, radios, sliders, text fields, dropdowns and key binds, found by how they look. Their hover, pressed and disabled variants become their states.",
   },
   {
-    q: "Can one project have several screens?",
-    a: "Yes. Prototype links, and buttons labelled Login or Continue, become screens with transitions. Dialogs become popups and notifications become toasts.",
+    q: "Does it handle apps with several screens?",
+    a: "Yes. Every frame the size of your app's window becomes a screen, prototype links become navigation, dialogs become popups and notifications become toasts.",
   },
   {
-    q: "What happens to my files?",
-    a: "They are deleted, with everything made from them, two hours after upload. Nothing is used for training.",
+    q: "How close does the result get?",
+    a: "Text is drawn from the design's own glyphs, and radii, strokes, gradients, shadows and masks keep their exact values. On the designs we test against, 98.9% to 99.9% of pixels match.",
   },
   {
-    q: "Can I change the generated code?",
-    a: "It is plain C++ you own, with no license checks or calls home. Change it, ship it, sell what you build with it.",
+    q: "How long do you keep uploads?",
+    a: "Two hours. Then the upload and everything made from it is deleted. Nothing is used for training.",
   },
 ];

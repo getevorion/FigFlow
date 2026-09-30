@@ -29,7 +29,7 @@ export function Comparison() {
   return (
     <section className="relative py-20">
       <div className="mx-auto max-w-6xl px-5">
-        <SectionHeading eyebrow="Why it's different" icon={GitCompareArrowsIcon} title="Not a picture of your UI. Your UI.">
+        <SectionHeading eyebrow="Why it's different" icon={GitCompareArrowsIcon} title="Widgets and screens, not draw calls.">
           Most converters flatten a design into draw calls with magic numbers. You can run that, but you can&apos;t work in it.
         </SectionHeading>
         <div className="mt-12 grid gap-5 md:grid-cols-2">

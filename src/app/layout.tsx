@@ -20,13 +20,13 @@ export const metadata: Metadata = {
     template: "%s · Figflow",
   },
   description:
-    "Figflow is an open-source community project: upload a Figma file and download a Dear ImGui C++ project that looks like the design, with real widgets in their own files, a theme from your styles, and controls, screens and popups that already work.",
+    "Figflow is a free, open-source Figma to Dear ImGui converter. Give it a .fig and get a C++ project with widgets in their own files, a theme built from your styles, and screens, popups and toasts wired up.",
   applicationName: "Figflow",
   openGraph: {
     type: "website",
     siteName: "Figflow",
     title: "Figflow · Figma to Dear ImGui",
-    description: "Your Figma frame, as a working Dear ImGui app.",
+    description: "Figma designs in, readable Dear ImGui C++ out.",
   },
 };
 

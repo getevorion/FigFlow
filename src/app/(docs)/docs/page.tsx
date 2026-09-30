@@ -1,47 +1,48 @@
 import { A, C, DocHeader, H2, P, Pager, Table, Ul } from "@/components/docs/prose";
 
-export const metadata = { title: "Introduction" };
+export const metadata = { title: "Overview" };
 
 export default function DocsIntroduction() {
   return (
     <article>
-      <DocHeader section="Getting started" title="Introduction">
-        Figflow turns a Figma frame into a Dear ImGui project in C++ that looks like the design and already works: its buttons, switches and fields respond, its
-        screens and popups open, and the code reads like code you&apos;d write yourself.
+      <DocHeader section="Start here" title="Overview">
+        Figflow reads a Figma design file and writes a Dear ImGui app in C++ from it: the screens, the widgets on them, the popups and toasts they open, and a
+        theme built from your styles.
       </DocHeader>
 
       <P>
-        Upload the <C>.fig</C> file of a design and download a project you can build in Visual Studio. Figflow reads the file itself, finds the frame your app
-        starts on and everything it leads to, so there is no Figma account to connect, nothing to pick and no layers to rename for most designs.
+        You give it the <C>.fig</C>; it decides which frame the app opens on, follows everything reachable from there, and hands back a project to build. For most
+        designs there is nothing to configure: no Figma account to link, no frame to pick, no layers to rename.
       </P>
 
-      <H2>What you get</H2>
+      <H2>The project you get</H2>
       <Ul>
         <li>
-          A C++20 project for Dear ImGui 1.92 on Windows and DirectX 11, with a Visual Studio solution and a <C>CMakeLists.txt</C>. Every dependency is included.
+          C++20 on Dear ImGui 1.92, for Windows with DirectX 11. It comes with a Visual Studio solution and a <C>CMakeLists.txt</C>, and carries every dependency.
         </li>
-        <li>One file per screen, popup and toast, and one file per kind of widget, written the way Dear ImGui&apos;s own widgets are.</li>
-        <li>A theme named after your Figma variables and styles: colors, text styles, and the looks of every control.</li>
+        <li>A file for each screen, popup and toast, and a file for each kind of widget, built the way Dear ImGui builds its own.</li>
+        <li>A theme generated from your Figma variables and styles: colours, text styles and the look of each control.</li>
         <li>
-          <C>actions.cpp</C>, with a function per control, already filled in where the design says what a control does. That&apos;s where your logic goes.
+          <C>actions.cpp</C>, with one function per control. Where the design already says what a control does, the function does it; the rest is where your logic
+          goes.
         </li>
       </Ul>
 
-      <H2>How it works</H2>
+      <H2>The steps</H2>
       <Table
         head={["Step", "What happens"]}
         rows={[
-          [<A key="1" href="/docs/export">Save a local copy</A>, "In Figma, File → Save local copy… gives you the .fig with every layer, image and glyph."],
-          [<A key="2" href="/docs/convert">Upload it</A>, "Figflow finds the frame your app starts on, and the screens, popups and toasts its buttons lead to, and converts them."],
-          [<A key="3" href="/docs/generated-code">Download and build</A>, "Open the solution, build Release, run. The app looks like the design and already works."],
+          [<A key="1" href="/docs/export">Grab the .fig</A>, "Figma's File → Save local copy… writes one file with every layer, image and glyph."],
+          [<A key="2" href="/docs/convert">Drop it in</A>, "Figflow picks the frame your app opens on, finds the other screens, popups and toasts, and converts them."],
+          [<A key="3" href="/docs/generated-code">Build and run</A>, "Open the solution and build Release. What runs is your design, with its controls wired up."],
         ]}
       />
 
-      <H2>Where your files go</H2>
+      <H2>Your files</H2>
       <P>
-        Your <C>.fig</C> is uploaded to Figflow and converted on its servers. Uploads belong to the browser that made them (a private cookie, no account), and
-        they&apos;re deleted, with every project made from them, two hours after the upload. You can delete one sooner from the converter. Nothing is used for
-        training.
+        Conversion happens on the server that hosts Figflow. An upload is tied to the browser that sent it through a private cookie (there are no accounts), and it
+        is removed two hours later together with every project made from it. You can remove it sooner from the converter, and nothing is used for training. Running
+        Figflow yourself keeps everything on your own machine.
       </P>
 
       <Pager href="/docs" />

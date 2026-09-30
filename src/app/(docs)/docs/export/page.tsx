@@ -1,11 +1,11 @@
 import { C, DocHeader, H2, Note, P, Pager, Steps, Step, Ul } from "@/components/docs/prose";
 
-export const metadata = { title: "Export your .fig file" };
+export const metadata = { title: "Getting your .fig" };
 
 export default function ExportDocs() {
   return (
     <article>
-      <DocHeader section="Getting started" title="Export your .fig file">
+      <DocHeader section="Start here" title="Getting your .fig">
         Figflow reads Figma&apos;s own file format. A local copy of your design has everything it needs.
       </DocHeader>
 

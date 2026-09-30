@@ -5,7 +5,7 @@ import { SiteHeader } from "@/components/site/site-header";
 
 export const metadata: Metadata = {
   title: { default: "Docs", template: "%s · Figflow docs" },
-  description: "How to turn a Figma file into a working Dear ImGui app with Figflow, and how the generated project fits together.",
+  description: "Figflow's documentation: getting a .fig out of Figma, converting it, and finding your way around the Dear ImGui project it writes.",
 };
 
 export default function DocsLayout({ children }: LayoutProps<"/docs">) {

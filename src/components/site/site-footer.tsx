@@ -7,19 +7,19 @@ type FooterLink = { href: string; label: string; external?: boolean };
 
 const columns: Array<{ title: string; links: FooterLink[] }> = [
   {
-    title: "Product",
+    title: "Figflow",
     links: [
+      { href: "/convert", label: "Converter" },
       { href: "/#how-it-works", label: "How it works" },
       { href: "/#features", label: "Features" },
       { href: "/#open-source", label: "Open source" },
-      { href: "/convert", label: "Convert a file" },
     ],
   },
   {
-    title: "Guide",
+    title: "Docs",
     links: [
-      { href: "/docs", label: "Getting started" },
-      { href: "/docs/export", label: "Export a .fig file" },
+      { href: "/docs", label: "Overview" },
+      { href: "/docs/export", label: "Getting your .fig" },
       { href: "/docs/generated-code", label: "The generated code" },
       { href: "/docs/troubleshooting", label: "Troubleshooting" },
     ],

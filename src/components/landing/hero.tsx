@@ -20,16 +20,16 @@ export function Hero() {
         </Link>
 
         <h1 className="mx-auto max-w-3xl text-[2.25rem] leading-[1.05] font-semibold tracking-[-0.04em] text-balance sm:text-[3rem] md:text-[4rem]">
-          Your Figma frame, <span className="text-brand-gradient font-serif font-normal tracking-[-0.02em] italic">running</span> in Dear ImGui.
+          Draw it in Figma. <span className="text-brand-gradient font-serif font-normal tracking-[-0.02em] italic">Ship</span> it in Dear ImGui.
         </h1>
         <p className="mx-auto mt-5 max-w-lg text-[15px] leading-relaxed text-pretty text-foreground/75">
-          Upload a <span className="font-mono text-[0.92em] text-foreground">.fig</span> file and get a C++ project that matches the design, with working widgets,
-          screens and popups.
+          Figflow reads your <span className="font-mono text-[0.92em] text-foreground">.fig</span> and writes the C++: real widgets, every screen, popups and
+          toasts, in a project that builds as it comes.
         </p>
 
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link href="/convert" className="lf-btn lf-btn-primary lf-btn-lg">
-            Convert a design free
+            Convert a design
             <ArrowRightIcon className="size-4" />
           </Link>
           <Link href="/#how-it-works" className="lf-btn lf-btn-ghost lf-btn-lg">
@@ -37,7 +37,7 @@ export function Hero() {
           </Link>
         </div>
         <ul className="mx-auto mt-7 flex max-w-xl flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-foreground/70">
-          {["Free and open source", "Builds in Visual Studio", "Deleted after 2 hours"].map((t) => (
+          {["Free, forever", "Open source", "No account needed"].map((t) => (
             <li key={t} className="flex items-center gap-1.5">
               <CheckIcon className="size-3.5 text-brand-soft" strokeWidth={2.5} />
               {t}

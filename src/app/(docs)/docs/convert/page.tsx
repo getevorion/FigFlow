@@ -1,11 +1,11 @@
 import { A, C, DocHeader, H2, Note, P, Pager, Steps, Step, Table } from "@/components/docs/prose";
 
-export const metadata = { title: "Convert and download" };
+export const metadata = { title: "Using the converter" };
 
 export default function ConvertDocs() {
   return (
     <article>
-      <DocHeader section="Getting started" title="Convert and download">
+      <DocHeader section="Start here" title="Using the converter">
         From an uploaded file to a project on your disk, in the converter at <A href="/convert">/convert</A>.
       </DocHeader>
 

@@ -217,22 +217,22 @@ export function Features() {
           icon={BlocksIcon}
           title={
             <>
-              Design it once. Ship an app that <span className="text-brand-gradient font-serif font-normal italic">works</span>.
+              Everything in the frame <span className="text-brand-gradient font-serif font-normal italic">comes along</span>.
             </>
           }
         >
-          Positions, fonts, icons, effects, components and states come through exactly. Every control becomes a variable in your code.
+          Layout, type, icons, effects, components and states carry over, and every control ends up as state your code can read and write.
         </SectionHeading>
 
         <div className="mt-12 grid gap-4 lg:grid-cols-6">
           <Cell
             className="lg:col-span-4 lg:row-span-2"
             stage="violet"
-            title="Code you'd write yourself."
-            body="One file per widget, written like Dear ImGui's own. Components stay components, frames become screens, and the theme is named after your styles."
+            title="Organised like a hand-built project."
+            body="Widgets live in ui/components, each screen is a function, and the theme is generated from your styles and variables. Figma components stay components."
             footer={
               <div className="mt-3 flex flex-wrap gap-2">
-                {["No draw-call dump", "Components stay components", "Variables become constants"].map((label) => (
+                {["No wall of draw calls", "Components kept intact", "Named colour constants"].map((label) => (
                   <span key={label} className="rounded-full border border-[#262626] bg-[#121212] px-2.5 py-1 text-[11px] text-foreground/75">
                     {label}
                   </span>
@@ -242,10 +242,10 @@ export function Features() {
           >
             <CodeVisual />
           </Cell>
-          <Cell className="lg:col-span-2" title="Pixel for pixel." body="Text sits on Figma's own baselines. Every corner keeps its radius." delay={0.05}>
+          <Cell className="lg:col-span-2" title="Down to the glyph." body="Text is drawn from the design's own glyph outlines on Figma's baselines, and every corner keeps its radius." delay={0.05}>
             <PixelVisual />
           </Cell>
-          <Cell className="lg:col-span-2" title="Every effect." body="Drop and inner shadows, glows, gradients and masks, with the design's own values." delay={0.1}>
+          <Cell className="lg:col-span-2" title="Shadows, glows, masks." body="Drop and inner shadows, glows, gradients, blurs and masks, using the values in your file." delay={0.1}>
             <EffectsVisual />
           </Cell>
           <Cell className="lg:col-span-2" stage="sky" title="States from your variants." body="Default, hover, pressed and disabled variants drive animated states." delay={0.05}>
