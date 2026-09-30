@@ -54,12 +54,16 @@ export class RawIndex {
   /** Each variable collection's default mode (its first). */
   readonly defaultMode = new Map<string, string>();
   readonly document: NodeChange | undefined;
+  /** Every overrideKey in the file (what instance overrides address layers by, see build.ts). */
+  readonly overrideKeys = new Set<string>();
 
   constructor(readonly message: Message) {
     const list = message.nodeChanges ?? [];
     for (const n of list) {
       if (!n.guid || n.phase === "REMOVED") continue;
       this.nodes.set(guidKey(n.guid), n);
+      const ok = (n as { overrideKey?: GUID }).overrideKey;
+      if (ok && !isNoneGuid(ok)) this.overrideKeys.add(guidKey(ok));
     }
     for (const n of this.nodes.values()) {
       const p = n.parentIndex?.guid;

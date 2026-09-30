@@ -55,6 +55,9 @@ async function writeAtomic(path: string, bytes: Uint8Array) {
 
 /** A frame (or part of one) as a PNG through the reference renderer, `scale` pixels per design pixel. */
 async function renderPng(built: BuildResult, scale: number, part?: { x: number; y: number; w: number; h: number }): Promise<Buffer> {
+  // resvg fails below half a pixel on a side: a thin divider frame shrunk to a thumbnail gets 1 px instead.
+  const side = Math.min(built.root.size.x, built.root.size.y);
+  if (side > 0 && side * scale < 1) scale = 1 / side;
   const drawn = new Map([...imageSizes(built.root)].map(([hash, s]) => [hash, { w: s.w * scale, h: s.h * scale }]));
   await images().prepare(drawn);
   const svg = renderSvg(built.root, { imageHref: images().href, glyphs: built.glyphs, backdrop: rasterBackdrop, rasterScale: scale });

@@ -7,7 +7,7 @@
  * image drawn small comes out jagged where Figma's is smooth.
  */
 import sharp from "sharp";
-import { sniffImageMime } from "../util/mime";
+import { isDrawableImage, sniffImageMime } from "../util/mime";
 import type { Size } from "./svg";
 
 const FACTORS = [2, 4, 8, 16, 32];
@@ -29,10 +29,10 @@ export class ImageLevels {
     await Promise.all([...drawn].map(([hash, want]) => this.ensure(hash, want)));
   }
 
-  /** SvgOptions.imageHref: the smallest prepared copy at least `want` big, else the file. */
+  /** SvgOptions.imageHref: the smallest prepared copy at least `want` big, else the file; none for bytes that aren't an image. */
   readonly href = (hash: string, want?: Size): string | undefined => {
     const bytes = this.images.get(hash);
-    if (!bytes) return undefined;
+    if (!bytes || !isDrawableImage(bytes)) return undefined;
     const levels = this.levelsOf(hash, bytes);
     const size = this.sizes.get(hash);
     if (want && size) for (let f = factorFor(size, want); f > 1; f /= 2) if (levels.has(f)) return levels.get(f);
@@ -41,7 +41,7 @@ export class ImageLevels {
 
   private async ensure(hash: string, want: Size): Promise<void> {
     const bytes = this.images.get(hash);
-    if (!bytes) return;
+    if (!bytes || !isDrawableImage(bytes)) return;
     const size = await this.sizeOf(hash, bytes);
     if (!size) return;
     const f = factorFor(size, want);

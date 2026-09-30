@@ -7,6 +7,7 @@
  * simply placed over it).
  */
 import { luminance } from "../model/math";
+import { noOpBlend } from "../model/paint";
 import type { DesignNode, Paint, Reaction, Rect, RGBA } from "../model/types";
 
 export type Role = "surface" | "text" | "icon" | "image" | "line" | "container" | "other";
@@ -67,7 +68,7 @@ export function clickLinks(n: DesignNode): Reaction[] {
 function topSolid(paints: Paint[], opacity: number): RGBA | undefined {
   for (let i = paints.length - 1; i >= 0; i--) {
     const p = paints[i];
-    if (!p.visible || p.opacity <= 0) continue;
+    if (!p.visible || p.opacity <= 0 || noOpBlend(p)) continue;
     if (p.type === "SOLID") return { ...p.color, a: p.color.a * p.opacity * opacity };
     if (p.type.startsWith("GRADIENT_") && "stops" in p && p.stops.length) {
       const mid = p.stops[Math.floor(p.stops.length / 2)].color;
@@ -107,7 +108,7 @@ function roleOf(n: DesignNode): Role {
   if (n.kind === "TEXT") return "text";
   if (n.kind === "LINE") return "line";
   if (ICON_KINDS.has(n.kind)) return n.box.w <= 96 && n.box.h <= 96 ? "icon" : "other";
-  const visibleFills = n.fills.filter((p) => p.visible && p.opacity > 0);
+  const visibleFills = n.fills.filter((p) => p.visible && p.opacity > 0 && !noOpBlend(p));
   const hasImage = visibleFills.some((p) => p.type === "IMAGE");
   const hasStroke = !!n.stroke && n.strokes.some((p) => p.visible);
   if ((n.kind === "GROUP" || n.kind === "FRAME" || n.kind === "INSTANCE" || n.kind === "COMPONENT") && isCompositeIcon(n) && !visibleFills.length && !hasStroke) return "icon";

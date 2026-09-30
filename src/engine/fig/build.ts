@@ -12,19 +12,23 @@
  * down, e.g. "18:9047/34:12128" = node 34:12128 inside nested instance 18:9047.
  */
 import type { NodeChange } from "./kiwi/schema";
-import { RawIndex, guidKey, isNoneGuid, type GUID, type VariableModes } from "./raw";
-import { GlyphTable, resolvePaths, vectorNetworkToPaths } from "./geometry";
+import { RawIndex, guidKey, isNoneGuid, type GUID, type VariableModes, type VariableRefData } from "./raw";
+import { GlyphTable, resolvePaths, vectorNetworkToPaths, type RegionFills } from "./geometry";
 import { resolveCorners, resolveEffects, resolvePaints, resolveStroke } from "./style";
 import { resolveText } from "./text";
 import { IDENTITY, mul, transformedBounds } from "../model/math";
+import { drawnFills } from "../model/paint";
+import { isDrawableImage } from "../util/mime";
 import type {
   AutoLayout,
   Constraint,
   DesignNode,
   DesignWarning,
+  ImagePaint,
   LayoutChild,
   Mat,
   NodeKind,
+  Paint,
   Reaction,
   Vec2,
 } from "../model/types";
@@ -39,8 +43,16 @@ const MAX_INSTANCE_DEPTH = 24;
 const META_FIELDS = new Set(["guidPath", "guid", "parentIndex", "phase", "type", "guidTag", "parentIndexTag", "typeTag"]);
 
 type ExpandCtx = {
-  /** Path key prefix inside the outermost instance ("" at the outermost master level). */
+  /**
+   * Path key prefix inside the outermost instance ("" at the outermost master level), spelled in
+   * override keys: guidPaths address master descendants by `overrideKey`, which a component copied
+   * in from a library keeps from the library while its guids are new.
+   */
   prefix: string;
+  /** The same path spelled in guids, for node ids. */
+  idPrefix: string;
+  /** Override and derived path keys that landed on a node, for the outermost instance being expanded. */
+  used: Set<string>;
   /** Overrides by full path key; the first entry of each list has the highest precedence. */
   overrides: Map<string, Partial[]>;
   /** Derived data by full path key (outermost instance wins). */
@@ -67,6 +79,8 @@ export type BuildResult = {
   /** Main components referenced by instances in this tree, by guid. */
   components: Map<string, { id: string; name: string; setId?: string; setName?: string; uses: number }>;
   warnings: DesignWarning[];
+  /** Instance overrides and derived data whose guidPath matched no layer (so they weren't applied). */
+  unmatchedOverrides: Array<{ instance: string; id: string; keys: string[] }>;
 };
 
 export class DesignBuilder {
@@ -76,9 +90,31 @@ export class DesignBuilder {
   private components: BuildResult["components"] = new Map();
   private warnings: DesignWarning[] = [];
   private warned = new Set<string>();
+  private unmatched: BuildResult["unmatchedOverrides"] = [];
+  /**
+   * Above zero while expanding a boolean operation's operands: they are built only so overrides
+   * addressed to them count as landed, and register no fonts, images, components or warnings.
+   */
+  private inert = 0;
 
-  constructor(private index: RawIndex) {
+  /** `images`: the file's image bytes by hash, to report images a layer uses that the file can't draw. */
+  constructor(
+    private index: RawIndex,
+    private imageBytes?: ReadonlyMap<string, Uint8Array>,
+  ) {
     this.glyphs = new GlyphTable(index);
+  }
+
+  private noteImage(p: ImagePaint, node: { id: string; name: string }) {
+    if (this.inert) return;
+    this.images.add(p.hash);
+    if (p.visible && p.filters && Object.values(p.filters).some((v) => v)) {
+      this.warn("image-adjustments", "Image adjustments (exposure, contrast, saturation, temperature, tint, highlights, shadows) aren't reproduced; the image is drawn unadjusted.", node);
+    }
+    if (!this.imageBytes) return;
+    const bytes = this.imageBytes.get(p.hash);
+    if (!bytes) this.warn("image-missing", "This image isn't in the file; it's drawn as a grey placeholder.", node);
+    else if (!isDrawableImage(bytes)) this.warn("image-unreadable", "This image's data isn't a PNG, JPEG, GIF or WebP image; it's drawn as a grey placeholder.", node);
   }
 
   /** Builds the full tree under one node (a frame, component, or any layer). */
@@ -92,6 +128,8 @@ export class DesignBuilder {
     for (const p of chain) modes = this.index.modesOf(p, modes);
     const root = this.node(raw, raw as Partial, {
       prefix: "",
+      idPrefix: "",
+      used: new Set(),
       overrides: new Map(),
       derived: new Map(),
       props: new Map(),
@@ -108,10 +146,12 @@ export class DesignBuilder {
       fonts: this.fonts,
       components: this.components,
       warnings: this.warnings,
+      unmatchedOverrides: this.unmatched,
     };
   }
 
   private warn(code: string, message: string, node?: { id: string; name: string }) {
+    if (this.inert) return;
     const k = `${code}|${node?.id ?? ""}`;
     if (this.warned.has(k)) return;
     this.warned.add(k);
@@ -124,23 +164,36 @@ export class DesignBuilder {
    */
   private node(source: NodeChange, raw: Partial, ctx: ExpandCtx, isClone: boolean): DesignNode {
     const guid = guidKey(source.guid);
-    const pathKey = isClone ? (ctx.prefix ? `${ctx.prefix}/${guid}` : guid) : "";
+    const overrideKey = (source as { overrideKey?: GUID }).overrideKey;
+    const key = overrideKey && !isNoneGuid(overrideKey) ? guidKey(overrideKey) : guid;
+    const pathKey = isClone ? (ctx.prefix ? `${ctx.prefix}/${key}` : key) : "";
+    const idPath = isClone ? (ctx.idPrefix ? `${ctx.idPrefix}/${guid}` : guid) : "";
     let merged: Partial = raw;
 
     if (isClone) {
       merged = this.applyProps(source, merged, ctx);
       const ovs = ctx.overrides.get(pathKey);
-      if (ovs) for (let i = ovs.length - 1; i >= 0; i--) merged = mergeOverride(merged, ovs[i], true);
+      if (ovs) {
+        ctx.used.add(pathKey);
+        for (let i = ovs.length - 1; i >= 0; i--) merged = mergeOverride(merged, ovs[i], true);
+      }
       const der = ctx.derived.get(pathKey);
-      if (der) merged = mergeOverride(merged, der, false);
-      else if (ctx.resize) merged = applyConstraints(merged, ctx.resize);
+      if (der) {
+        ctx.used.add(pathKey);
+        merged = mergeOverride(merged, der, false);
+      } else if (ctx.resize) merged = applyConstraints(merged, ctx.resize);
     }
-    if (merged.type === "INSTANCE") merged = this.inheritFromMaster(merged);
+    if (merged.type === "INSTANCE") {
+      // Before anything is taken from the main component: a variable may pick another variant of it.
+      const bound = this.boundVariant(merged, this.index.modesOf(merged as { variableModeBySetMap?: unknown }, ctx.modes));
+      if (bound) merged = { ...merged, overriddenSymbolID: bound };
+      merged = this.inheritFromMaster(merged);
+    }
     // Variable modes this node selects apply to it and everything inside it.
     const modes = this.index.modesOf(merged as { variableModeBySetMap?: unknown }, ctx.modes);
     if (modes !== ctx.modes) ctx = { ...ctx, modes };
 
-    const id = isClone ? `${ctx.idBase}${pathKey}` : guid;
+    const id = isClone ? `${ctx.idBase}${idPath}` : guid;
     const kind = nodeKind(merged, this.index);
     const size: Vec2 = { x: (merged.size as Vec2 | undefined)?.x ?? 0, y: (merged.size as Vec2 | undefined)?.y ?? 0 };
     const name = (merged.name as string) ?? "";
@@ -184,7 +237,7 @@ export class DesignBuilder {
     node.fills = resolvePaints(this.index, merged.fillPaints as never, size, modes);
     node.strokes = resolvePaints(this.index, merged.strokePaints as never, size, modes);
     node.stroke = resolveStroke(merged as NodeChange, node.strokes.some((p) => p.visible));
-    for (const p of [...node.fills, ...node.strokes]) if (p.type === "IMAGE") this.images.add(p.hash);
+    for (const p of [...node.fills, ...node.strokes]) if (p.type === "IMAGE") this.noteImage(p, node);
     for (const p of [...((merged.fillPaints as AnyRec[] | undefined) ?? []), ...((merged.strokePaints as AnyRec[] | undefined) ?? [])]) {
       if (p.visible !== false && !["SOLID", "GRADIENT_LINEAR", "GRADIENT_RADIAL", "GRADIENT_ANGULAR", "GRADIENT_DIAMOND", "IMAGE"].includes(p.type as string)) {
         this.warn("paint-unsupported", `${p.type} paints are approximated.`, node);
@@ -209,14 +262,15 @@ export class DesignBuilder {
 
     // Geometry for anything that isn't a plain box.
     if (kind === "VECTOR" || kind === "BOOLEAN" || kind === "STAR" || kind === "POLYGON" || kind === "LINE" || kind === "ELLIPSE") {
-      node.fillGeometry = resolvePaths(this.index, merged.fillGeometry as never);
+      const regionFills = this.regionFills(merged, size, modes, node);
+      node.fillGeometry = resolvePaths(this.index, merged.fillGeometry as never, regionFills);
       node.strokeGeometry = resolvePaths(this.index, merged.strokeGeometry as never);
       if (!node.fillGeometry.length && kind === "VECTOR") {
         const vd = merged.vectorData as { vectorNetworkBlob?: number; normalizedSize?: Vec2 } | undefined;
         const bytes = this.index.blob(vd?.vectorNetworkBlob);
         if (bytes) {
           const ns = vd?.normalizedSize;
-          node.fillGeometry = vectorNetworkToPaths(bytes, ns?.x ? size.x / ns.x : 1, ns?.y ? size.y / ns.y : 1);
+          node.fillGeometry = vectorNetworkToPaths(bytes, ns?.x ? size.x / ns.x : 1, ns?.y ? size.y / ns.y : 1, regionFills);
         }
       }
     } else if (kind === "RECTANGLE" || kind === "FRAME" || kind === "INSTANCE" || kind === "COMPONENT") {
@@ -226,7 +280,7 @@ export class DesignBuilder {
 
     if (kind === "TEXT") {
       node.text = resolveText(this.index, merged as NodeChange, this.glyphs, modes);
-      for (const r of node.text.runs) {
+      if (!this.inert) for (const r of node.text.runs) {
         const fk = `${r.font.family}|${r.font.style}`;
         const f = this.fonts.get(fk);
         if (f) f.layers++;
@@ -244,9 +298,20 @@ export class DesignBuilder {
       if (set) node.variant = parseVariantName(name);
     }
 
-    // Children.
+    // Children. A boolean operation draws its result, the fill geometry Figma saves for it, in its
+    // own paints; its operands never draw, so they aren't children.
     if (kind === "INSTANCE") {
-      this.expandInstance(source, merged, node, ctx, isClone, pathKey);
+      this.expandInstance(source, merged, node, ctx, isClone, pathKey, idPath);
+    } else if (kind === "BOOLEAN") {
+      this.inert++;
+      try {
+        for (const child of this.index.childrenOf(source)) this.node(child, child as Partial, ctx, isClone);
+      } finally {
+        this.inert--;
+      }
+      if (!node.fillGeometry.length && drawnFills(node).some((p) => p.visible)) {
+        this.warn("boolean-no-geometry", "This boolean operation has no saved result shape from Figma; it is left out.", node);
+      }
     } else {
       const kids = this.index.childrenOf(source);
       for (const child of kids) {
@@ -271,6 +336,55 @@ export class DesignBuilder {
       out[k] = v;
     }
     return out as Partial;
+  }
+
+  /**
+   * Variant properties bound to variables (Figma's RESOLVE_VARIANT, e.g. "Mode" following a Light/Dark
+   * collection): the variant of the instance's component set they pick under `modes`, when that isn't
+   * the one the instance points at. Undefined when nothing is bound, the variable isn't in the file
+   * (Figma's saved variant stays), or no variant matches.
+   */
+  /**
+   * A vector's regions filled on their own (Figma's paint bucket): each path's styleID picks an
+   * entry of `vectorData.styleOverrideTable`, and an entry with fillPaints (even none) replaces the
+   * layer's fills there. Entries without them style vertices or segments (caps, corners).
+   */
+  private regionFills(merged: Partial, size: Vec2, modes: VariableModes, node: DesignNode): RegionFills | undefined {
+    const table = (merged.vectorData as { styleOverrideTable?: AnyRec[] } | undefined)?.styleOverrideTable;
+    const byStyle = new Map<number, Paint[]>();
+    for (const e of table ?? []) {
+      if (typeof e.styleID !== "number" || !Array.isArray(e.fillPaints)) continue;
+      const fills = resolvePaints(this.index, e.fillPaints as never, size, modes);
+      for (const p of fills) if (p.type === "IMAGE") this.noteImage(p, node);
+      byStyle.set(e.styleID, fills);
+    }
+    return byStyle.size ? (id) => byStyle.get(id) : undefined;
+  }
+
+  private boundVariant(merged: Partial, modes: VariableModes): GUID | undefined {
+    type Binding = { variableField?: string; variableData?: { value?: { expressionValue?: { expressionFunction?: string; expressionArguments?: Array<{ value?: { mapValue?: { values?: Array<{ key?: string; value?: VariableRefData }> } } }> } } } };
+    const entries = [
+      ...(((merged.variableConsumptionMap as { entries?: Binding[] } | undefined)?.entries) ?? []),
+      ...(((merged.parameterConsumptionMap as { entries?: Binding[] } | undefined)?.entries) ?? []),
+    ];
+    const expr = entries.find((e) => e.variableField === "VARIANT_PROPERTIES")?.variableData?.value?.expressionValue;
+    if (expr?.expressionFunction !== "RESOLVE_VARIANT") return undefined;
+    const swap = merged.overriddenSymbolID as GUID | undefined;
+    const current = this.index.get(swap && !isNoneGuid(swap) ? guidKey(swap) : guidKey((merged.symbolData as { symbolID?: GUID } | undefined)?.symbolID));
+    const set = current && this.index.componentSetOf(current);
+    if (!current || !set) return undefined;
+    const want = parseVariantName(current.name ?? "");
+    let changed = false;
+    for (const b of expr.expressionArguments?.[0]?.value?.mapValue?.values ?? []) {
+      const v = b.key ? (this.index.resolveBound(b.value, modes) as { textValue?: unknown; boolValue?: unknown } | undefined) : undefined;
+      const text = typeof v?.textValue === "string" ? v.textValue : typeof v?.boolValue === "boolean" ? (v.boolValue ? "True" : "False") : undefined;
+      if (!b.key || text === undefined || want[b.key]?.toLowerCase() === text.toLowerCase()) continue;
+      want[b.key] = text;
+      changed = true;
+    }
+    if (!changed) return undefined;
+    const same = (a: Record<string, string>) => Object.keys(want).every((k) => a[k]?.toLowerCase() === want[k].toLowerCase());
+    return this.index.childrenOf(set).find((c) => c.type === "SYMBOL" && same(parseVariantName(c.name ?? "")))?.guid;
   }
 
   /** Applies component property references on a master descendant. */
@@ -303,7 +417,7 @@ export class DesignBuilder {
     return out;
   }
 
-  private expandInstance(source: NodeChange, merged: Partial, node: DesignNode, ctx: ExpandCtx, isClone: boolean, pathKey: string) {
+  private expandInstance(source: NodeChange, merged: Partial, node: DesignNode, ctx: ExpandCtx, isClone: boolean, pathKey: string, idPath: string) {
     const swap = merged.overriddenSymbolID as GUID | undefined;
     const symbolId = swap && !isNoneGuid(swap) ? guidKey(swap) : guidKey((merged.symbolData as { symbolID?: GUID } | undefined)?.symbolID);
     const master = this.index.get(symbolId);
@@ -322,9 +436,12 @@ export class DesignBuilder {
       name: master.name ?? "",
       set: set ? { id: guidKey(set.guid), name: set.name ?? "" } : undefined,
     };
-    const rec = this.components.get(symbolId);
-    if (rec) rec.uses++;
-    else this.components.set(symbolId, { id: symbolId, name: master.name ?? "", setId: set ? guidKey(set.guid) : undefined, setName: set?.name, uses: 1 });
+    // An operand of a boolean operation isn't drawn, so it isn't a use of the component.
+    if (!this.inert) {
+      const rec = this.components.get(symbolId);
+      if (rec) rec.uses++;
+      else this.components.set(symbolId, { id: symbolId, name: master.name ?? "", setId: set ? guidKey(set.guid) : undefined, setName: set?.name, uses: 1 });
+    }
 
     // Resolved props: variant values + assignments.
     const props = new Map<string, PropValue>();
@@ -358,11 +475,15 @@ export class DesignBuilder {
     const overrides = new Map(ctx.overrides);
     const derived = new Map(ctx.derived);
     const levelPrefix = isClone ? pathKey : "";
+    const mine: string[] = [];
     const add = (list: Partial[] | undefined, into: "o" | "d", lowPrecedence: boolean) => {
       for (const o of list ?? []) {
         const segs = (o.guidPath as { guids?: GUID[] } | undefined)?.guids;
         if (!segs?.length) continue;
         const key = (levelPrefix ? levelPrefix + "/" : "") + segs.map(guidKey).join("/");
+        // Only this instance's own changes count as lost when unmatched: a nested instance's saved
+        // data can still describe a variant it no longer uses, and Figma ignores that too.
+        if (!lowPrecedence) mine.push(key);
         if (into === "o") {
           const arr = overrides.get(key) ?? [];
           if (lowPrecedence) arr.push(o);
@@ -384,6 +505,8 @@ export class DesignBuilder {
 
     const child: ExpandCtx = {
       prefix: levelPrefix,
+      idPrefix: isClone ? idPath : "",
+      used: isClone ? ctx.used : new Set(),
       overrides,
       derived,
       props,
@@ -396,6 +519,15 @@ export class DesignBuilder {
     for (const c of this.index.childrenOf(master)) {
       node.children.push(this.node(c, c as Partial, child, true));
     }
+    // Overrides that found no layer: the designer's changes that would be lost. Entries for the
+    // component's own root describe the instance itself, which carries them already.
+    const masterKey = (master as { overrideKey?: GUID }).overrideKey;
+    const rootPath = (levelPrefix ? levelPrefix + "/" : "") + (masterKey && !isNoneGuid(masterKey) ? guidKey(masterKey) : symbolId);
+    // A path through layers the file no longer has is an override the designer's edits left behind:
+    // Figma ignores it too. Only paths whose layers all exist, yet matched nothing, are lost.
+    const exists = (seg: string) => this.index.overrideKeys.has(seg) || !!this.index.get(seg);
+    const lost = [...new Set(mine)].filter((k) => k !== rootPath && !child.used.has(k) && k.split("/").every(exists));
+    if (lost.length) this.unmatched.push({ instance: node.name, id: node.id, keys: lost });
     if (uniform && uniform !== 1) {
       this.warn("instance-scaled", "Scaled instances (K tool) are drawn at their component size.", node);
     }

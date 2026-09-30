@@ -129,8 +129,12 @@ export type Effect = ShadowEffect | BlurEffect;
 // --- Geometry ------------------------------------------------------------
 
 export type WindingRule = "NONZERO" | "EVENODD";
-/** One path: SVG path data in the layer's local pixel space. */
-export type GeometryPath = { d: string; winding: WindingRule };
+/**
+ * One path: SVG path data in the layer's local pixel space. A vector network
+ * region filled on its own (Figma's paint bucket) carries its fills; the other
+ * paths are filled with the layer's.
+ */
+export type GeometryPath = { d: string; winding: WindingRule; fills?: Paint[] };
 
 /** Corner radii in pixels. `smoothing` is Figma's corner smoothing (0..1). */
 export type Corners = { tl: number; tr: number; br: number; bl: number; smoothing: number };

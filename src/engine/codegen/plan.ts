@@ -4,6 +4,7 @@
  * layer it came from so the generated code can name and comment it.
  */
 import { IDENTITY, isTranslation, mul, transformedBounds } from "../model/math";
+import { drawnFills, noOpBlend } from "../model/paint";
 import type { DesignNode, Effect, Mat, Paint, Rect, RGBA, TextRun } from "../model/types";
 import { isCompositeIcon } from "../semantic/scene";
 import { cleanLayerName } from "./cpp";
@@ -84,7 +85,24 @@ export type Plan = {
 const SHAPE_KINDS = new Set(["VECTOR", "BOOLEAN", "STAR", "POLYGON", "LINE"]);
 
 function visiblePaints(ps: Paint[]): Paint[] {
-  return ps.filter((p) => p.visible && p.opacity > 0);
+  return ps.filter((p) => p.visible && p.opacity > 0 && !noOpBlend(p));
+}
+
+/** A fill or stroke that mixes with what's beneath it: only a bake over that backdrop reproduces it. */
+function paintBlend(n: DesignNode): Paint | undefined {
+  return [...visiblePaints(drawnFills(n)), ...(n.stroke ? visiblePaints(n.strokes) : [])].find((p) => p.blendMode !== "NORMAL" && p.blendMode !== "PASS_THROUGH");
+}
+
+/**
+ * A layer under `n` that mixes with what's beneath `n`: Figma's groups and masks pass blending
+ * through, while a layer with a blend mode of its own keeps its insides to itself.
+ */
+function blendsThrough(n: DesignNode): boolean {
+  return n.children.some((c) => {
+    if (!c.visible || c.mask) return false;
+    if (c.blendMode !== "NORMAL" && c.blendMode !== "PASS_THROUGH") return true;
+    return !!paintBlend(c) || (c.blendMode === "PASS_THROUGH" && blendsThrough(c));
+  });
 }
 
 function effectExtent(effects: Effect[]): number {
@@ -132,7 +150,7 @@ function singleColor(n: DesignNode): RGBA | null {
   const visit = (x: DesignNode) => {
     if (!x.visible || !ok) return;
     if (x.effects.some((e) => e.visible)) ok = false;
-    const paints = [...visiblePaints(x.fills), ...(x.stroke ? visiblePaints(x.strokes) : [])];
+    const paints = [...visiblePaints(drawnFills(x)), ...(x.stroke ? visiblePaints(x.strokes) : [])];
     // A lone shape with one paint: its opacity is just that paint's alpha (with a fill and a
     // stroke, or children, layer opacity isn't the same as fading each part, so no).
     const lone = !x.children.length && paints.length === 1;
@@ -343,15 +361,27 @@ export function planFrame(root: DesignNode, options: PlanOptions = { sections: t
     }
     const rect = transformedBounds(toRoot, n.size.x, n.size.y);
     const axisAligned = isTranslation(toRoot) || (Math.abs(toRoot.m01) < 1e-4 && Math.abs(toRoot.m10) < 1e-4 && toRoot.m00 > 0 && toRoot.m11 > 0);
-    const blended = n.blendMode !== "NORMAL" && n.blendMode !== "PASS_THROUGH";
+    const layerBlend = n.blendMode !== "NORMAL" && n.blendMode !== "PASS_THROUGH";
+    const ownBlend = layerBlend ? undefined : paintBlend(n);
+    const blended = layerBlend || !!ownBlend;
     const layerBlur = n.effects.some((e) => e.visible && e.type === "LAYER_BLUR" && e.radius > 0);
 
     // Whole subtrees that can't be drawn natively are baked (and stay static).
     if (!isRoot && (!axisAligned || blended || layerBlur || hasMaskChild(n) || (n.opacity < 0.999 && n.children.length > 0 && subtreeHas(n, (c) => c !== n && c.visible && (c.fills.length > 0 || !!c.text))))) {
-      const why = !axisAligned ? "rotated" : blended ? `${n.blendMode.toLowerCase()} blend` : layerBlur ? "layer blur" : hasMaskChild(n) ? "mask" : "group opacity";
+      // Layers in it that blend with what's beneath it need that backdrop in the bake too.
+      const through = !blended && n.blendMode === "PASS_THROUGH" && blendsThrough(n);
+      const why = !axisAligned
+        ? "rotated"
+        : blended
+          ? `${(ownBlend?.blendMode ?? n.blendMode).toLowerCase().replace("_", " ")} blend${ownBlend ? " on its paint" : ""}`
+          : layerBlur
+            ? "layer blur"
+            : hasMaskChild(n)
+              ? "mask"
+              : "group opacity";
       // A blend mode mixes the layer with what's beneath it, so that's baked in too.
-      const req = raster(n, toRoot, why, blended ? "blend" : "color");
-      if (blended) {
+      const req = raster(n, toRoot, through ? `${why}, blending with what's beneath` : why, blended || through ? "blend" : "color");
+      if (blended || through) {
         // Its bake crops renders of the whole frame: whole pixels, inside the frame.
         req.backdrop = root;
         const x0 = Math.max(0, Math.floor(req.rect.x));
@@ -360,7 +390,7 @@ export function planFrame(root: DesignNode, options: PlanOptions = { sections: t
         const y1 = Math.min(Math.ceil(root.size.y), Math.ceil(req.rect.y + req.rect.h));
         req.rect = { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
       }
-      ops.push({ kind: "raster", node: n, rect: blended ? req.rect : rect, raster: req });
+      ops.push({ kind: "raster", node: n, rect: blended || through ? req.rect : rect, raster: req });
       return;
     }
 
@@ -371,7 +401,7 @@ export function planFrame(root: DesignNode, options: PlanOptions = { sections: t
     }
 
     // An icon drawn as a group of vectors is one image (one tint), as the design treats it.
-    if (!isRoot && (n.kind === "GROUP" || n.kind === "FRAME" || n.kind === "INSTANCE" || n.kind === "COMPONENT") && isCompositeIcon(n) && !n.fills.some((p) => p.visible) && !(n.stroke && n.strokes.some((p) => p.visible))) {
+    if (!isRoot && (n.kind === "GROUP" || n.kind === "FRAME" || n.kind === "INSTANCE" || n.kind === "COMPONENT") && isCompositeIcon(n) && !n.fills.some((p) => p.visible) && !(n.stroke && n.strokes.some((p) => p.visible)) && !blendsThrough(n)) {
       const tint = singleColor(n);
       ops.push({ kind: "raster", node: n, rect, raster: raster(n, toRoot, tint ? "icon" : "vector", tint ? "mask" : "color", tint ?? undefined) });
       return;

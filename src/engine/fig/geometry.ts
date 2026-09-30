@@ -8,7 +8,7 @@
  */
 import { parseCommandsBlob, parseVectorNetworkBlob } from "./kiwi/blob-parser";
 import type { RawIndex } from "./raw";
-import type { GeometryPath, WindingRule } from "../model/types";
+import type { GeometryPath, Paint, WindingRule } from "../model/types";
 
 const fmt = (v: number) => {
   const r = Math.round(v * 1000) / 1000;
@@ -67,8 +67,16 @@ export function winding(rule: string | undefined): WindingRule {
 
 type RawPath = { windingRule?: string; commandsBlob?: number; styleID?: number };
 
+/** A vector's own fills for a region's style (see `vectorData.styleOverrideTable`); undefined keeps the layer's. */
+export type RegionFills = (styleID: number) => Paint[] | undefined;
+
+function path(d: string, rule: WindingRule, styleID: number | undefined, regionFills: RegionFills | undefined): GeometryPath {
+  const fills = styleID ? regionFills?.(styleID) : undefined;
+  return fills ? { d, winding: rule, fills } : { d, winding: rule };
+}
+
 /** Resolves a node's fillGeometry/strokeGeometry list to SVG paths. */
-export function resolvePaths(index: RawIndex, paths: RawPath[] | undefined): GeometryPath[] {
+export function resolvePaths(index: RawIndex, paths: RawPath[] | undefined, regionFills?: RegionFills): GeometryPath[] {
   if (!paths?.length) return [];
   const out: GeometryPath[] = [];
   for (const p of paths) {
@@ -77,7 +85,7 @@ export function resolvePaths(index: RawIndex, paths: RawPath[] | undefined): Geo
     const cmds = parseCommandsBlob(bytes);
     if (!cmds?.length) continue;
     const d = commandsToPath(cmds);
-    if (d) out.push({ d, winding: winding(p.windingRule) });
+    if (d) out.push(path(d, winding(p.windingRule), p.styleID, regionFills));
   }
   return out;
 }
@@ -87,7 +95,7 @@ export function resolvePaths(index: RawIndex, paths: RawPath[] | undefined): Geo
  * Each region is one path; each loop is a closed subpath of its segments.
  * `scaleX/Y` map the network's normalized size onto the layer's size.
  */
-export function vectorNetworkToPaths(bytes: Uint8Array, scaleX = 1, scaleY = 1): GeometryPath[] {
+export function vectorNetworkToPaths(bytes: Uint8Array, scaleX = 1, scaleY = 1, regionFills?: RegionFills): GeometryPath[] {
   const vn = parseVectorNetworkBlob(bytes);
   if (!vn) return [];
   const out: GeometryPath[] = [];
@@ -111,7 +119,7 @@ export function vectorNetworkToPaths(bytes: Uint8Array, scaleX = 1, scaleY = 1):
       }
       if (!first) d += "Z";
     }
-    if (d) out.push({ d, winding: region.windingRule === "ODD" ? "EVENODD" : "NONZERO" });
+    if (d) out.push(path(d, region.windingRule === "ODD" ? "EVENODD" : "NONZERO", region.styleID, regionFills));
   }
   return out;
 }

@@ -8,6 +8,12 @@ export function sniffImageMime(b: Uint8Array): string {
   return "application/octet-stream";
 }
 
+/** Bytes the renderers can draw: a PNG, JPEG, GIF or WebP image. */
+export function isDrawableImage(b: Uint8Array): boolean {
+  const mime = sniffImageMime(b);
+  return mime !== "application/octet-stream" && mime !== "image/svg+xml";
+}
+
 /** Pixel size of a PNG/JPEG/GIF/WebP from its header, without decoding. */
 export function imageSize(b: Uint8Array): { width: number; height: number } | null {
   const mime = sniffImageMime(b);

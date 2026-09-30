@@ -4,9 +4,10 @@
  * rasterizing artwork the ImGui runtime can't draw natively, and as the
  * oracle compiled output is compared against.
  */
-import type { BlurEffect, Corners, DesignNode, GradientPaint, Mat, Paint, Rect, RGBA, ShadowEffect, Stroke } from "../model/types";
+import type { BlurEffect, Corners, DesignNode, GradientPaint, ImagePaint, Mat, Paint, Rect, RGBA, ShadowEffect, Stroke } from "../model/types";
 import { fitCorners } from "../fig/style";
 import { IDENTITY, invert, mul, transformedBounds, translate } from "../model/math";
+import { drawnFills } from "../model/paint";
 import type { BackdropImage, BackdropRequest } from "./backdrop";
 
 export type SvgOptions = {
@@ -87,6 +88,12 @@ function cropInverse(t: Mat): Mat {
   return { m00: t.m11 / det, m01: -t.m01 / det, m10: -t.m10 / det, m11: t.m00 / det, m02: (t.m01 * t.m12 - t.m11 * t.m02) / det, m12: (t.m10 * t.m02 - t.m00 * t.m12) / det };
 }
 
+/** An image paint's clockwise quarter turns (Figma's "Rotate 90°", in degrees; not for crops). */
+function quarterTurns(p: ImagePaint): number {
+  if (p.scaleMode === "STRETCH") return 0;
+  return ((Math.round((p.rotation ?? 0) / 90) % 4) + 4) % 4;
+}
+
 /** How large a paint draws its whole image, in the layer's units (null for other paints). */
 function imageDrawSize(p: Paint, node: DesignNode): Size | null {
   if (p.type !== "IMAGE" || !p.visible) return null;
@@ -95,7 +102,9 @@ function imageDrawSize(p: Paint, node: DesignNode): Size | null {
   const iw = p.imageSize?.x ?? w;
   const ih = p.imageSize?.y ?? h;
   if (p.scaleMode === "FILL" || p.scaleMode === "FIT") {
-    const k = p.scaleMode === "FILL" ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih);
+    // Turned a quarter, the image fits the layer with its sides swapped.
+    const [rw, rh] = quarterTurns(p) % 2 ? [ih, iw] : [iw, ih];
+    const k = p.scaleMode === "FILL" ? Math.max(w / rw, h / rh) : Math.min(w / rw, h / rh);
     return { w: iw * k, h: ih * k };
   }
   if (p.scaleMode === "STRETCH" && p.transform) {
@@ -119,7 +128,7 @@ function matScale(m: Mat): number {
 export function imageSizes(root: DesignNode, toRoot: Mat = IDENTITY, out = new Map<string, Size>()): Map<string, Size> {
   if (!root.visible) return out;
   const k = matScale(toRoot);
-  const paints = [...root.fills, ...root.strokes, ...(root.text?.runs.flatMap((r) => r.fills) ?? [])];
+  const paints = [...drawnFills(root), ...root.strokes, ...(root.text?.runs.flatMap((r) => r.fills) ?? [])];
   for (const p of paints) {
     const d = imageDrawSize(p, root);
     if (!d || p.type !== "IMAGE") continue;
@@ -128,6 +137,10 @@ export function imageSizes(root: DesignNode, toRoot: Mat = IDENTITY, out = new M
   }
   for (const c of root.children) imageSizes(c, mul(toRoot, c.transform), out);
   return out;
+}
+
+function hasLayerBlend(node: DesignNode): boolean {
+  return node.blendMode !== "PASS_THROUGH" && node.blendMode !== "NORMAL";
 }
 
 function isBoxShape(node: DesignNode): boolean {
@@ -229,18 +242,21 @@ class SvgWriter {
         const known = this.imageDrawn.get(p.hash);
         this.imageDrawn.set(p.hash, { w: Math.max(known?.w ?? 0, drawn.w * k), h: Math.max(known?.h ?? 0, drawn.h * k) });
         const clip = this.id("ic");
-        this.defs.push(`<clipPath id="${clip}"><path d="${shapeD}"/></clipPath>`);
+        this.defs.push(`<clipPath id="${clip}"><path d="${shapeD}"${node.fillGeometry[0]?.winding === "EVENODD" ? ` clip-rule="evenodd"` : ""}/></clipPath>`);
         const w = node.size.x;
         const h = node.size.y;
         const iw = p.imageSize?.x ?? w;
         const ih = p.imageSize?.y ?? h;
         let img = "";
         const unit = this.imageDef(p.hash);
+        // The image turned clockwise about its centre, placed with its centre at (cx, cy).
+        const turned = (cx: number, cy: number, dw: number, dh: number) =>
+          `<use href="#${unit}" transform="translate(${n(cx)} ${n(cy)}) rotate(${quarterTurns(p) * 90}) scale(${n(dw)} ${n(dh)}) translate(-0.5 -0.5)"/>`;
         if (p.scaleMode === "FILL" || p.scaleMode === "FIT") {
-          const s = p.scaleMode === "FILL" ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih);
-          const dw = iw * s;
-          const dh = ih * s;
-          img = `<use href="#${unit}" transform="translate(${n((w - dw) / 2)} ${n((h - dh) / 2)}) scale(${n(dw)} ${n(dh)})"/>`;
+          const d = imageDrawSize(p, node)!;
+          img = quarterTurns(p)
+            ? turned(w / 2, h / 2, d.w, d.h)
+            : `<use href="#${unit}" transform="translate(${n((w - d.w) / 2)} ${n((h - d.h) / 2)}) scale(${n(d.w)} ${n(d.h)})"/>`;
         } else if (p.scaleMode === "STRETCH" && p.transform) {
           // transform maps the layer's unit square into the image's unit square
           const inv = cropInverse(p.transform);
@@ -248,9 +264,10 @@ class SvgWriter {
         } else if (p.scaleMode === "TILE") {
           const s = p.scale ?? 1;
           const pat = this.id("pt");
-          this.defs.push(
-            `<pattern id="${pat}" patternUnits="userSpaceOnUse" width="${n(iw * s)}" height="${n(ih * s)}"><use href="#${unit}" transform="scale(${n(iw * s)} ${n(ih * s)})"/></pattern>`,
-          );
+          // Each tile is the turned image, tiled from the layer's corner.
+          const [tw, th] = quarterTurns(p) % 2 ? [ih * s, iw * s] : [iw * s, ih * s];
+          const tile = quarterTurns(p) ? turned(tw / 2, th / 2, iw * s, ih * s) : `<use href="#${unit}" transform="scale(${n(iw * s)} ${n(ih * s)})"/>`;
+          this.defs.push(`<pattern id="${pat}" patternUnits="userSpaceOnUse" width="${n(tw)}" height="${n(th)}">${tile}</pattern>`);
           return { attr: `url(#${pat})`, extra: p.opacity < 1 ? ` fill-opacity="${n(p.opacity)}"` : undefined };
         } else {
           img = `<use href="#${unit}" transform="scale(${n(w)} ${n(h)})"/>`;
@@ -446,7 +463,7 @@ function backdrop(w: SvgWriter, node: DesignNode, d: string, toRoot: Mat, radius
   const img = w.opts.backdrop({ svgAt, canvas: { w: root.size.x, h: root.size.y }, region: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, sigma: radius / 2, scale });
   if (!img) return "";
   const white: Paint = { type: "SOLID", color: { r: 1, g: 1, b: 1, a: 1 }, opacity: 1, visible: true, blendMode: "NORMAL" };
-  const fillArea = node.fills.some((p) => p.visible && p.opacity > 0.001) ? `<path d="${d}" fill="#fff"${fillRule(node)}/>` : "";
+  const fillArea = drawnFills(node).some((p) => p.visible && p.opacity > 0.001) ? `<path d="${d}" fill="#fff"${fillRule(node)}/>` : "";
   const strokeArea = node.stroke && node.strokes.some((p) => p.visible) ? renderStrokes(w, { ...node, strokes: [white] }, toRoot) : "";
   if (!fillArea && !strokeArea) return "";
   const m = w.id("bm");
@@ -455,6 +472,9 @@ function backdrop(w: SvgWriter, node: DesignNode, d: string, toRoot: Mat, radius
 }
 
 function renderFills(w: SvgWriter, node: DesignNode, d: string, toRoot: Mat): string {
+  if (node.fillGeometry.some((g) => g.fills)) {
+    return node.fillGeometry.map((g) => renderFills(w, { ...node, fills: g.fills ?? node.fills, fillGeometry: [{ d: g.d, winding: g.winding }] }, g.d, toRoot)).join("");
+  }
   let out = "";
   for (const p of node.fills) {
     const r = w.paint(p, node, d, toRoot);
@@ -469,12 +489,27 @@ function renderStrokes(w: SvgWriter, node: DesignNode, toRoot: Mat): string {
   const s = node.stroke;
   if (!s || !node.strokes.some((p) => p.visible)) return "";
   let out = "";
-  // Pre-outlined stroke geometry from Figma: exact caps, joins and alignment.
+  // Pre-outlined stroke geometry from Figma: exact caps and joins. An inside or outside stroke is
+  // saved as a centred stroke twice as wide, of which Figma draws the part inside the fill shape
+  // (inside) or outside it (outside).
   if (node.strokeGeometry.length && !isBoxShape(node)) {
     const d = node.strokeGeometry.map((g) => g.d).join("");
     for (const p of node.strokes) {
       const r = w.paint(p, node, d, toRoot);
       if (r?.attr) out += `<path d="${d}" fill="${r.attr}"${r.extra ?? ""}/>`;
+    }
+    if (out && s.align !== "CENTER" && node.fillGeometry.length) {
+      const shape = shapePath(node);
+      const evenOdd = node.fillGeometry[0].winding === "EVENODD";
+      const id = w.id("sa");
+      if (s.align === "INSIDE") {
+        w.defs.push(`<clipPath id="${id}"><path d="${shape}"${evenOdd ? ` clip-rule="evenodd"` : ""}/></clipPath>`);
+        out = `<g clip-path="url(#${id})">${out}</g>`;
+      } else {
+        const all = `x="-100000" y="-100000" width="200000" height="200000"`;
+        w.defs.push(`<mask id="${id}" maskUnits="userSpaceOnUse" ${all}><rect ${all} fill="#fff"/><path d="${shape}" fill="#000"${evenOdd ? ` fill-rule="evenodd"` : ""}/></mask>`);
+        out = `<g mask="url(#${id})">${out}</g>`;
+      }
     }
     return out;
   }
@@ -598,26 +633,86 @@ function cssBlend(b: string): string {
   return map[b] ?? "normal";
 }
 
-/** `toRoot` maps the node's own space to the root's (for background blurs). */
-function renderNode(w: SvgWriter, node: DesignNode, isRoot: boolean, toRoot: Mat): string {
+/** How far a layer's paint reaches past its box: shadows, blurs, strokes, glyphs overhanging a text box. */
+function reach(node: DesignNode): number {
+  let e = 0;
+  for (const fx of node.effects) {
+    if (!fx.visible) continue;
+    if (fx.type === "DROP_SHADOW") e = Math.max(e, fx.radius * 1.5 + Math.max(0, fx.spread) + Math.max(Math.abs(fx.offset.x), Math.abs(fx.offset.y)));
+    else if (fx.type === "LAYER_BLUR" || fx.type === "BACKGROUND_BLUR") e = Math.max(e, fx.radius * 1.5);
+  }
+  const s = node.stroke;
+  if (s && node.strokes.some((p) => p.visible)) e = Math.max(e, 2 * (s.sides ? Math.max(s.sides.top, s.sides.right, s.sides.bottom, s.sides.left) : s.weight));
+  if (node.kind === "TEXT" && node.text) for (const r of node.text.runs) e = Math.max(e, r.fontSize);
+  return e;
+}
+
+const paintBoxes = new WeakMap<DesignNode, Rect>();
+
+/** Everything a layer can paint, in root space: its box and its children's (unless it clips them), plus their reach. */
+function paintBounds(node: DesignNode): Rect {
+  const known = paintBoxes.get(node);
+  if (known) return known;
+  const m = reach(node);
+  let x0 = node.box.x - m;
+  let y0 = node.box.y - m;
+  let x1 = node.box.x + node.box.w + m;
+  let y1 = node.box.y + node.box.h + m;
+  if (!node.clipsContent) {
+    for (const c of node.children) {
+      if (!c.visible) continue;
+      const b = paintBounds(c);
+      x0 = Math.min(x0, b.x);
+      y0 = Math.min(y0, b.y);
+      x1 = Math.max(x1, b.x + b.w);
+      y1 = Math.max(y1, b.y + b.h);
+    }
+  }
+  const r = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  paintBoxes.set(node, r);
+  return r;
+}
+
+function holds(node: DesignNode, target: DesignNode | undefined): boolean {
+  return !!target && (node === target || node.children.some((c) => holds(c, target)));
+}
+
+/**
+ * True when nothing of the layer reaches the document (a list scrolled far out of its frame). It paints
+ * no pixels, and resvg panics on an isolated layer (opacity, clip, mask, filter) lying more than twice
+ * the page's size away, so it's left out. A layer holding a cut (SvgOptions.stopBefore/After) stays.
+ */
+function offCanvas(w: SvgWriter, node: DesignNode): boolean {
+  const b = paintBounds(node);
+  const c = w.canvas;
+  const off = b.x > c.x + c.w || b.y > c.y + c.h || b.x + b.w < c.x || b.y + b.h < c.y;
+  return off && !holds(node, w.opts.stopBefore) && !holds(node, w.opts.stopAfter);
+}
+
+/**
+ * `toRoot` maps the node's own space to the root's (for background blurs). With `blend` false the
+ * node's blend mode is left to the caller, which applies it on an element of its own.
+ */
+function renderNode(w: SvgWriter, node: DesignNode, isRoot: boolean, toRoot: Mat, blend = true): string {
   // Partial documents (see SvgOptions.stopBefore): everything from the cut on is left out.
   if (w.cut) return "";
   if (node === w.opts.stopBefore) {
     w.cut = true;
     return "";
   }
-  const out = renderNodeInner(w, node, isRoot, toRoot);
+  const out = renderNodeInner(w, node, isRoot, toRoot, blend);
   if (node === w.opts.stopAfter) w.cut = true;
   return out;
 }
 
-function renderNodeInner(w: SvgWriter, node: DesignNode, isRoot: boolean, toRoot: Mat): string {
+function renderNodeInner(w: SvgWriter, node: DesignNode, isRoot: boolean, toRoot: Mat, blend: boolean): string {
   if (!node.visible || node.kind === "SLICE") return "";
   // Drawing a backdrop: everything from the blurred layer on is left out.
   if (w.stopAt && (w.stopped || node === w.stopAt)) {
     w.stopped = true;
     return "";
   }
+  if (!isRoot && offCanvas(w, node)) return "";
   const idAttr = w.opts.ids ? ` data-id="${esc(node.id)}"` : "";
   const d = shapePath(node);
 
@@ -632,7 +727,7 @@ function renderNodeInner(w: SvgWriter, node: DesignNode, isRoot: boolean, toRoot
   const shadowRegion = (e: ShadowEffect, k: number) => w.region(node, toRoot, Math.max(Math.abs(e.offset.x), Math.abs(e.offset.y)) + Math.abs(e.spread) + 1.5 * e.radius + 1, k);
 
   if (drawSelf && node.kind !== "GROUP") {
-    const hasFill = node.fills.some((p) => p.visible);
+    const hasFill = drawnFills(node).some((p) => p.visible);
     const bgBlur = effects.find((e): e is BlurEffect => e.type === "BACKGROUND_BLUR" && e.radius > 0);
     if (bgBlur && w.root && !w.stopAt) body += backdrop(w, node, d, toRoot, bgBlur.radius);
     // Shadows are cast by the layer's coverage (see coverage()).
@@ -661,11 +756,20 @@ function renderNodeInner(w: SvgWriter, node: DesignNode, isRoot: boolean, toRoot
       pendingMask = { id, items: [] };
       continue;
     }
+    if (pendingMask && hasLayerBlend(c)) {
+      // A masked group is drawn on its own, so a blend mode in it would mix with nothing. In Figma
+      // masked layers blend with everything beneath: the layer takes the mask and its blend mode.
+      if (pendingMask.items.length) kids += `<g mask="url(#${pendingMask.id})">${pendingMask.items.join("")}</g>`;
+      pendingMask.items = [];
+      const r = renderNode(w, c, false, mul(toRoot, c.transform), false);
+      if (r) kids += `<g mask="url(#${pendingMask.id})" style="mix-blend-mode:${cssBlend(c.blendMode)}">${r}</g>`;
+      continue;
+    }
     const r = renderNode(w, c, false, mul(toRoot, c.transform));
     if (pendingMask) pendingMask.items.push(r);
     else kids += r;
   }
-  if (pendingMask) kids += `<g mask="url(#${pendingMask.id})">${pendingMask.items.join("")}</g>`;
+  if (pendingMask?.items.length) kids += `<g mask="url(#${pendingMask.id})">${pendingMask.items.join("")}</g>`;
   if (kids && node.clipsContent) {
     const clip = w.id("cp");
     w.defs.push(`<clipPath id="${clip}"><path d="${roundedRectPath(0, 0, node.size.x, node.size.y, node.corners)}"/></clipPath>`);
@@ -681,7 +785,7 @@ function renderNodeInner(w: SvgWriter, node: DesignNode, isRoot: boolean, toRoot
   const attrs: string[] = [];
   if (!isRoot) attrs.push(matAttr(node.transform).trim());
   if (node.opacity < 1) attrs.push(`opacity="${n(node.opacity)}"`);
-  if (node.blendMode !== "PASS_THROUGH" && node.blendMode !== "NORMAL") attrs.push(`style="mix-blend-mode:${cssBlend(node.blendMode)}"`);
+  if (blend && hasLayerBlend(node)) attrs.push(`style="mix-blend-mode:${cssBlend(node.blendMode)}"`);
   return `<g${idAttr}${attrs.filter(Boolean).length ? " " + attrs.filter(Boolean).join(" ") : ""}>${content}</g>`;
 }
 

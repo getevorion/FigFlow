@@ -50,11 +50,14 @@ export class FigFile {
   pages(): PageSummary[] {
     return this.index.pages().map((page) => {
       const frames: FrameSummary[] = [];
-      const visit = (n: NodeChange, section?: string) => {
+      // A section's children are placed relative to it (sections don't rotate): add its offset for canvas positions.
+      const visit = (n: NodeChange, section?: string, ox = 0, oy = 0) => {
         const kind = summaryKind(n);
         if (!kind) return;
+        const x = ox + (n.transform?.m02 ?? 0);
+        const y = oy + (n.transform?.m12 ?? 0);
         if (kind === "SECTION") {
-          for (const c of this.index.childrenOf(n)) visit(c, n.name ?? "Section");
+          for (const c of this.index.childrenOf(n)) visit(c, n.name ?? "Section", x, y);
           return;
         }
         frames.push({
@@ -63,8 +66,8 @@ export class FigFile {
           kind,
           width: n.size?.x ?? 0,
           height: n.size?.y ?? 0,
-          x: n.transform?.m02 ?? 0,
-          y: n.transform?.m12 ?? 0,
+          x,
+          y,
           layers: this.index.childrenOf(n).length,
           section,
         });
@@ -76,7 +79,7 @@ export class FigFile {
 
   /** Builds the full design tree under a node, with instances expanded. */
   build(nodeId: string): BuildResult {
-    return new DesignBuilder(this.index).build(nodeId);
+    return new DesignBuilder(this.index, this.images).build(nodeId);
   }
 
   pageOf(nodeId: string): NodeChange | undefined {
