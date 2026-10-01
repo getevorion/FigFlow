@@ -47,7 +47,9 @@ export function parseTags(raw: string): Tag[] {
   const name = raw.trim();
   const tags: Tag[] = [];
   const lower = name.toLowerCase();
-  const m = lower.match(/^\s*([a-z ]+?)\s*[:\-–]\s*(.*)$/);
+  // "go: Settings", "go – Settings", "go - Settings". A hyphen inside a word doesn't count: icon
+  // names are kebab-case ("radio-tower", "check-circle"), not tags.
+  const m = lower.match(/^\s*([a-z ]+?)(?:\s*[:–]|\s+-)\s*(.*)$/);
   const rest = m ? name.slice(name.length - m[2].length).trim() : "";
   const head = m?.[1].trim();
 
@@ -107,7 +109,7 @@ export function parseTags(raw: string): Tag[] {
     }
   }
   // "Menu | Page: Visuals" on frames
-  const page = name.match(/page\s*[:\-–]\s*(.+)$/i);
+  const page = name.match(/page(?:\s*[:–]|\s+-)\s*(.+)$/i);
   if (page && !tags.some((t) => t.kind === "page")) tags.push({ kind: "page", name: page[1].trim() });
   return tags;
 }
@@ -130,13 +132,15 @@ export function stateFromName(name: string): "hover" | "pressed" | "disabled" | 
 /** Words in a widget's layer or component name that name its kind. */
 export function widgetKindFromName(name: string): WidgetKind | null {
   const n = name.toLowerCase();
-  if (/\b(toggle|switch)\b/.test(n)) return "toggle";
-  if (/\bcheck\s*box|checkbox\b/.test(n)) return "checkbox";
-  if (/\bradio\b/.test(n)) return "radio";
-  if (/\bslider|range\b/.test(n)) return "slider";
-  if (/\b(input|text\s*field|textfield|search|password|email|username)\b/.test(n)) return "text_field";
-  if (/\b(dropdown|combo|select|picker)\b/.test(n)) return "combo";
-  if (/\b(keybind|hotkey|key\s*bind)\b/.test(n)) return "keybind";
-  if (/\b(button|btn|cta)\b/.test(n)) return "button";
+  // Whole words, and a hyphenated name is one word: "radio-tower" is an icon, not a radio.
+  const has = (words: RegExp) => new RegExp(`(?<![\\w-])(?:${words.source})(?![\\w-])`).test(n);
+  if (has(/toggles?|switch(?:es)?/)) return "toggle";
+  if (has(/check\s*box(?:es)?/)) return "checkbox";
+  if (has(/radio(?:\s*buttons?)?|radios/)) return "radio";
+  if (has(/sliders?|range/)) return "slider";
+  if (has(/input|text\s*field|textfield|search|password|email|username/)) return "text_field";
+  if (has(/dropdown|combo|select|picker/)) return "combo";
+  if (has(/keybind|hotkey|key\s*bind/)) return "keybind";
+  if (has(/button|btn|cta/)) return "button";
   return null;
 }

@@ -161,7 +161,9 @@ export function buildScene(root: DesignNode): Scene {
     if (all.some((o) => o.z > e.z && o.role !== "container" && o !== rootEl && mostlyInside(o.ink, e.box, 0.9) && area(o.ink) < plate * 0.7)) e.role = "surface";
   }
 
-  // Attach every piece of content to the innermost surface below it that contains it.
+  // Attach every piece of content to the surface it sits on: the last one painted beneath it that
+  // contains it. (The smallest would do for nested surfaces, but not for a glow circle of one card
+  // reaching under the next card, which covers it.)
   const surfaces = all.filter((e) => e.role === "surface" || e.role === "image");
   for (const e of all) {
     if (e === rootEl || e.role === "container") continue;
@@ -170,7 +172,7 @@ export function buildScene(root: DesignNode): Scene {
       if (s === e || s.z >= e.z) continue;
       if (!mostlyInside(e.ink, s.box, 0.8)) continue;
       if (s.box.w * s.box.h < e.ink.w * e.ink.h * 1.02) continue; // must be bigger than the content
-      if (!best || s.box.w * s.box.h < best.box.w * best.box.h) best = s;
+      if (!best || s.z > best.z) best = s;
     }
     if (best) {
       e.host = best;

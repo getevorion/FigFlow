@@ -448,8 +448,9 @@ export class AppEmitter {
       case "button": {
         this.usedWidgets.add("ui::ButtonStyle");
         const ink = (c.label ? textColor(c.label) : null) ?? this.iconTint(c.icon);
-        const radii = c.surface?.box.radii ?? [0, 0, 0, 0];
-        let idle = c.surface?.box ?? emptyBox(radii);
+        // Every state's look keeps the plate's shape: a round plate's hover is round too.
+        const radii: PlanBox["radii"] = c.surface?.ellipse ? knobBox(c.surface).radii : (c.surface?.box.radii ?? [0, 0, 0, 0]);
+        let idle = c.surface ? { ...c.surface.box, radii } : emptyBox(radii);
         let selected: PlanBox | null = null;
         let idleLabel: RGBA | null = null;
         let selLabel: RGBA | null = null;

@@ -519,6 +519,25 @@ void stroke(ImDrawList* dl, const ImRect& r, const Radii& radii, const Stroke& s
     ImVector<ImVec2> po, pi;
     emit_contour(po, so, t);
     emit_contour(pi, si, t);
+    // The ring's width at each point (emit_contour's order): a side's weight along it, and around a
+    // corner the two sides' weights blended by direction. The distance between the contours won't do:
+    // a sharp corner's points all sit at its diagonal, which would bleed into a side with no weight.
+    ImVector<float> widths;
+    {
+        const float a0[4] = { IM_PI, IM_PI * 1.5f, 0.f, IM_PI * 0.5f };
+        const float wx[4] = { wl, wr, wr, wl }, wy[4] = { wt, wt, wb, wb }, after[4] = { wt, wr, wb, wl };
+        for (int k = 0; k < 4; k++)
+        {
+            for (int i = 0; i <= t.arc; i++)
+            {
+                const float a = a0[k] + (IM_PI * 0.5f) * (float)i / (float)t.arc;
+                const float x = wx[k] * ImCos(a), y = wy[k] * ImSin(a);
+                widths.push_back(ImSqrt(x * x + y * y));
+            }
+            for (int i = 1; i < t.edge; i++)
+                widths.push_back(after[k]);
+        }
+    }
     const int n = po.Size;
     ImVector<ImVec2> no, ni;
     vertex_normals(po.Data, n, no);
@@ -535,8 +554,7 @@ void stroke(ImDrawList* dl, const ImRect& r, const Radii& radii, const Stroke& s
     {
         // Coverage follows the local ring width: sides with zero weight vanish
         // (no stray fringe), hairlines thinner than a pixel fade proportionally.
-        const float width = ImSqrt(ImLengthSqr(po[i] - pi[i]));
-        const ImU32 c = with_alpha(col, col_alpha * ImSaturate(width));
+        const ImU32 c = with_alpha(col, col_alpha * ImSaturate(widths[i]));
         dl->PrimWriteVtx(po[i] + no[i] * h, uv, clear);
         dl->PrimWriteVtx(po[i] - no[i] * h, uv, c);
         dl->PrimWriteVtx(pi[i] + ni[i] * h, uv, c);

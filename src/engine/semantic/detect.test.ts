@@ -198,3 +198,83 @@ describe("buttons", () => {
     expect(r.widgets[0]?.evidence.score).toBe(0.7);
   });
 });
+
+const card = (name: string, box: Rect) => rect(name, box, "15171c", { corners: { tl: 18, tr: 18, br: 18, bl: 18, smoothing: 0 } });
+const icon = (name: string, box: Rect) => node("FRAME", name, box, {}, [node("VECTOR", "Vector", { x: box.x + 2, y: box.y + 2, w: box.w - 4, h: box.h - 4 }, { fills: [solid("a3a6af")] })]);
+function toggleAt(x: number, y: number): DesignNode[] {
+  return [
+    rect("Toggle", { x, y, w: 38, h: 22 }, "ff615c", { corners: { tl: 11, tr: 11, br: 11, bl: 11, smoothing: 0 } }),
+    dot("Thumb", { x: x + 18, y: y + 2, w: 18, h: 18 }, "ffffff"),
+  ];
+}
+
+describe("labels", () => {
+  it("come from the control's own card, not the card beside it however close", () => {
+    const r = detect([
+      card("Security", { x: 20, y: 20, w: 370, h: 200 }),
+      text("Stateful firewall", { x: 40, y: 50, w: 100, h: 15 }, "a3a6af", 12),
+      ...toggleAt(330, 46),
+      card("Device", { x: 408, y: 20, w: 370, h: 200 }),
+      text("Model", { x: 428, y: 50, w: 40, h: 15 }, "686c76", 12),
+    ]);
+    const t = r.widgets.find((w) => w.kind === "toggle");
+    expect(t?.label?.text).toBe("Stateful firewall");
+  });
+});
+
+describe("what isn't a control", () => {
+  it("grey words on a box you can't see aren't a text field", () => {
+    const clear = { ...solid("000000"), opacity: 0 } as Paint;
+    const r = detect([
+      node("FRAME", "Navigation item", { x: 16, y: 196, w: 204, h: 42 }, { fills: [clear] }, [icon("radio", { x: 26, y: 207, w: 20, h: 20 }), text("Network", { x: 57, y: 209, w: 60, h: 16 }, "8a8d96", 13)]),
+    ]);
+    expect(r.widgets.some((w) => w.kind === "text_field")).toBe(false);
+  });
+
+  it("an icon tile leading a heading is neither a checkbox nor a button", () => {
+    const r = detect([
+      card("Card", { x: 20, y: 20, w: 370, h: 200 }),
+      rect("Icon tile", { x: 40, y: 40, w: 34, h: 34 }, "21242a", { corners: { tl: 10, tr: 10, br: 10, bl: 10, smoothing: 0 } }),
+      icon("shield-check", { x: 49, y: 49, w: 16, h: 16 }),
+      text("Security", { x: 86, y: 40, w: 80, h: 19 }, "f5f5f7", 16),
+      text("Traffic and device protection", { x: 86, y: 61, w: 180, h: 13 }, "686c76", 11),
+    ]);
+    expect(r.widgets.filter((w) => w.kind === "checkbox" || w.kind === "button" || w.kind === "icon_button")).toEqual([]);
+  });
+
+  it("an icon named in kebab case isn't a tagged control", () => {
+    const r = detect([icon("radio-tower", { x: 40, y: 40, w: 16, h: 16 })]);
+    expect(r.widgets.some((w) => w.kind === "radio")).toBe(false);
+  });
+
+  it("a dot on a card near the top right isn't a window button", () => {
+    const r = detectWidgets(
+      frame([card("Live signal", { x: 988, y: 94, w: 422, h: 244 }), icon("activity", { x: 1021, y: 127, w: 16, h: 16 }), dot("Signal pulse", { x: 1378, y: 129, w: 8, h: 8 }, "ff615c")], 1440, 1024),
+    );
+    expect(r.widgets.some((w) => w.kind === "window_button")).toBe(false);
+  });
+
+  it("a big dial showing a number is a readout, not a button", () => {
+    const r = detect([
+      card("Card", { x: 20, y: 20, w: 400, h: 200 }),
+      ring("Gauge track", { x: 40, y: 40, w: 104, h: 104 }, "21242a"),
+      text("−67", { x: 70, y: 72, w: 43, h: 27 }, "f5f5f7", 22),
+      text("dBm", { x: 81, y: 100, w: 22, h: 12 }, "686c76", 10),
+    ]);
+    expect(r.widgets.some((w) => w.kind === "button")).toBe(false);
+  });
+});
+
+describe("controls named by their component", () => {
+  it("an instance of a checkbox component drawn as one picture is a checkbox, checked as its variant says", () => {
+    const tick = node("INSTANCE", "check_small", { x: 479, y: 103, w: 24, h: 24 }, {}, [node("VECTOR", "icon", { x: 485, y: 110, w: 12, h: 9 }, { fills: [solid("ffffff")] })]);
+    const layer = node("FRAME", "state-layer", { x: 471, y: 95, w: 40, h: 40 }, {}, [rect("container", { x: 482, y: 106, w: 18, h: 18 }, "39ff07"), tick]);
+    const instance = node("INSTANCE", "Checkboxes", { x: 456, y: 83, w: 69, h: 64 }, { component: { id: "c", name: "Type=Selected, State=Enabled", set: { id: "s", name: "Checkboxes" } } } as Partial<DesignNode>, [layer]);
+    const r = detect([card("Panel", { x: 215, y: 73, w: 292, h: 533 }), text("Aimbot", { x: 221, y: 108, w: 60, h: 20 }, "ffffff", 16), instance]);
+    const c = r.widgets.find((w) => w.kind === "checkbox");
+    expect(c?.label?.text).toBe("Aimbot");
+    expect(c?.value).toBe(true);
+    expect(c?.parts.box?.name).toBe("container");
+    expect(c?.parts.mark?.name).toBe("icon");
+  });
+});

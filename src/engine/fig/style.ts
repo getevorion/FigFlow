@@ -121,12 +121,13 @@ export function resolvePaints(index: RawIndex, paints: KPaint[] | undefined, siz
 export function resolveStroke(n: NodeChange, hasStrokes: boolean): Stroke | null {
   const weight = n.strokeWeight ?? 0;
   const independent = n.borderStrokeWeightsIndependent === true;
+  // A side the file sets no weight for draws nothing (Figma's own render of a divider set only on its left side).
   const sides = independent
     ? {
-        top: n.borderTopHidden ? 0 : (n.borderTopWeight ?? weight),
-        right: n.borderRightHidden ? 0 : (n.borderRightWeight ?? weight),
-        bottom: n.borderBottomHidden ? 0 : (n.borderBottomWeight ?? weight),
-        left: n.borderLeftHidden ? 0 : (n.borderLeftWeight ?? weight),
+        top: n.borderTopHidden ? 0 : (n.borderTopWeight ?? 0),
+        right: n.borderRightHidden ? 0 : (n.borderRightWeight ?? 0),
+        bottom: n.borderBottomHidden ? 0 : (n.borderBottomWeight ?? 0),
+        left: n.borderLeftHidden ? 0 : (n.borderLeftWeight ?? 0),
       }
     : undefined;
   const any = sides ? Math.max(sides.top, sides.right, sides.bottom, sides.left) : weight;

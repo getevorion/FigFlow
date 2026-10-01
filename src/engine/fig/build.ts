@@ -318,6 +318,20 @@ export class DesignBuilder {
         node.children.push(this.node(child, child as Partial, ctx, isClone));
       }
     }
+    // A group's size is its children's extent. Files can save it as NaN (groups Figma never
+    // re-measured), which would spread to every box under it: measure the children instead.
+    if (!Number.isFinite(node.size.x) || !Number.isFinite(node.size.y)) {
+      let x1 = 0;
+      let y1 = 0;
+      for (const c of node.children) {
+        if (!Number.isFinite(c.size.x) || !Number.isFinite(c.size.y)) continue;
+        const b = transformedBounds(c.transform, c.size.x, c.size.y);
+        x1 = Math.max(x1, b.x + b.w);
+        y1 = Math.max(y1, b.y + b.h);
+      }
+      node.size = { x: x1, y: y1 };
+      node.box = { x: 0, y: 0, w: x1, h: y1 };
+    }
     return node;
   }
 

@@ -87,6 +87,26 @@ describe("resolveFonts", () => {
     expect(face.kerning[0][2]).toBeCloseTo(-0.06, 3);
   });
 
+  it("files a text case's glyphs under the letters Figma drew, not the ones typed", async () => {
+    // Typed "va" in upper case: Figma drew and saved "VA" (their outlines, advances and kerning).
+    const upper = textNode("VA", 20, { 0: -0.04 }, { textCase: "UPPER" });
+    upper.text!.characters = "va";
+    const smallCaps = textNode("AV", 20, { 0: -0.3 }, { textCase: "SMALL_CAPS" });
+    smallCaps.text!.characters = "av";
+    const root = { children: [upper, smallCaps] } as unknown as DesignNode;
+    const [face] = await resolveFonts([key], [{ root, glyphs: paths }], null, fallback, () => {});
+    const font = opentype.parse(face.bytes.buffer.slice(face.bytes.byteOffset, face.bytes.byteOffset + face.bytes.byteLength) as ArrayBuffer);
+    expect(font.charToGlyphIndex("V")).not.toBe(0);
+    expect(font.charToGlyphIndex("A")).not.toBe(0);
+    // The lowercase letters stay the fonts' behind (small caps are other glyphs of them).
+    expect(font.charToGlyphIndex("v")).toBe(0);
+    expect(font.charToGlyphIndex("a")).toBe(0);
+    const kern = new Map(face.kerning.map(([l, r, em]) => [`${String.fromCodePoint(l)}${String.fromCodePoint(r)}`, em]));
+    expect(kern.get("VA")).toBeCloseTo(-0.04, 3);
+    expect(kern.has("va")).toBe(false);
+    expect(kern.has("av")).toBe(false);
+  });
+
   it("uses the provider's font when the file saved no layout", async () => {
     const node = textNode("AV", 10, {});
     node.text!.hasLayout = false;

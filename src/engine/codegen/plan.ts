@@ -5,6 +5,7 @@
  */
 import { IDENTITY, isTranslation, mul, transformedBounds } from "../model/math";
 import { drawnFills, noOpBlend } from "../model/paint";
+import { applyCase } from "../model/text";
 import type { DesignNode, Effect, Mat, Paint, Rect, RGBA, TextRun } from "../model/types";
 import { isCompositeIcon } from "../semantic/scene";
 import { cleanLayerName } from "./cpp";
@@ -207,6 +208,11 @@ export type PlanOptions = {
   skip?: Set<string>;
   /** Prefix for raster request ids, so plans of one project don't collide. */
   prefix?: string;
+  /**
+   * Layers (by id) a control draws itself (a checkbox's box and tick): a group holding one isn't
+   * baked into one picture, so each keeps its own op for the control to take.
+   */
+  keepApart?: Set<string>;
 };
 
 export function planFrame(root: DesignNode, options: PlanOptions = { sections: true }): Plan {
@@ -226,6 +232,7 @@ export function planFrame(root: DesignNode, options: PlanOptions = { sections: t
   };
   /** The top-level layer being planned (a screen's section), for naming images in it. */
   let section = "";
+  const holdsPart = (n: DesignNode): boolean => !!options.keepApart?.size && n.children.some((c) => options.keepApart!.has(c.id) || holdsPart(c));
 
   const boxFor = (n: DesignNode, toRoot: Mat): PlanBox | null => {
     // Figma casts shadows from the layer's pixels. With a possibly transparent
@@ -273,7 +280,8 @@ export function planFrame(root: DesignNode, options: PlanOptions = { sections: t
       else if (e.type === "LAYER_BLUR") return null;
     }
     if (shadows.length > 4) warnings.push({ code: "shadows-limit", message: "Only four shadows per layer are drawn.", nodeId: n.id, nodeName: n.name });
-    if (!fills.length && !stroke && !shadows.length && !backdropBlur) return { fills, radii: [0, 0, 0, 0], stroke: null, shadows, opacity: 1, backdropBlur };
+    // A clear plate keeps its corners: the looks a control adds on it (hover, press) take its shape.
+    if (!fills.length && !stroke && !shadows.length && !backdropBlur) return { fills, radii: [n.corners.tl, n.corners.tr, n.corners.br, n.corners.bl], stroke: null, shadows, opacity: 1, backdropBlur };
     return {
       fills: fills.slice(-3),
       radii: [n.corners.tl, n.corners.tr, n.corners.br, n.corners.bl],
@@ -401,7 +409,7 @@ export function planFrame(root: DesignNode, options: PlanOptions = { sections: t
     }
 
     // An icon drawn as a group of vectors is one image (one tint), as the design treats it.
-    if (!isRoot && (n.kind === "GROUP" || n.kind === "FRAME" || n.kind === "INSTANCE" || n.kind === "COMPONENT") && isCompositeIcon(n) && !n.fills.some((p) => p.visible) && !(n.stroke && n.strokes.some((p) => p.visible)) && !blendsThrough(n)) {
+    if (!isRoot && (n.kind === "GROUP" || n.kind === "FRAME" || n.kind === "INSTANCE" || n.kind === "COMPONENT") && isCompositeIcon(n) && !n.fills.some((p) => p.visible) && !(n.stroke && n.strokes.some((p) => p.visible)) && !blendsThrough(n) && !holdsPart(n)) {
       const tint = singleColor(n);
       ops.push({ kind: "raster", node: n, rect, raster: raster(n, toRoot, tint ? "icon" : "vector", tint ? "mask" : "color", tint ?? undefined) });
       return;
@@ -457,17 +465,4 @@ function isFullEllipse(n: DesignNode): boolean {
   // Ellipses whose saved geometry is just the ellipse (no arc/donut) draw natively.
   const d = n.fillGeometry[0]?.d ?? "";
   return n.fillGeometry.length <= 1 && (d.match(/M/g) ?? []).length <= 1 && !/L/.test(d);
-}
-
-function applyCase(s: string, c: TextRun["textCase"]): string {
-  switch (c) {
-    case "UPPER":
-      return s.toUpperCase();
-    case "LOWER":
-      return s.toLowerCase();
-    case "TITLE":
-      return s.replace(/\b\p{L}/gu, (m) => m.toUpperCase());
-    default:
-      return s;
-  }
 }

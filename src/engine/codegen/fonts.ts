@@ -18,7 +18,8 @@
  */
 import { createHash } from "node:crypto";
 import opentype from "opentype.js";
-import type { DesignNode } from "../model/types";
+import { applyCase } from "../model/text";
+import type { DesignNode, TextData } from "../model/types";
 import { snake } from "./cpp";
 
 export type FontKey = { family: string; weight: number; italic: boolean };
@@ -123,12 +124,36 @@ export function collectOutlines(sources: TextSource[]): Map<string, OutlineSet> 
   return sets;
 }
 
+/**
+ * The characters Figma drew, index for index with the text's `characters`, and whether the glyph at
+ * an index is known to be that character. A text case changes what's drawn ("CONTROL" for "Control");
+ * small caps are other forms of the letters, and a case change that alters the length (ß to SS)
+ * can't be lined up with the glyphs.
+ */
+function drawnText(t: TextData): { shown: string; known: (ci: number) => boolean } {
+  const units = t.characters.split("");
+  const unknown: Array<[number, number]> = [];
+  for (const r of t.runs) {
+    if (r.textCase === "ORIGINAL") continue;
+    const from = t.characters.slice(r.start, r.end);
+    const to = applyCase(from, r.textCase);
+    if (r.textCase === "SMALL_CAPS" || r.textCase === "SMALL_CAPS_FORCED" || to.length !== from.length) {
+      unknown.push([r.start, r.end]);
+      continue;
+    }
+    for (let i = 0; i < to.length; i++) units[r.start + i] = to[i];
+  }
+  return { shown: units.join(""), known: (ci) => !unknown.some(([a, b]) => ci >= a && ci < b) };
+}
+
 function collectFrom(root: DesignNode, glyphPaths: string[], sets: Map<string, OutlineSet>) {
   const visit = (n: DesignNode) => {
     if (n.text && n.text.hasLayout) {
       const t = n.text;
       const runAt = (ci: number) => t.runs.find((r) => ci >= r.start && ci < r.end) ?? t.runs[0];
       const lineAt = (ci: number) => t.lines.findIndex((l) => ci >= l.firstChar && ci < l.endChar);
+      // Outlines and pen steps are filed under the characters drawn, not the ones typed.
+      const { shown, known: mapped } = drawnText(t);
       // Glyph `char` indexes are UTF-16 offsets into `characters`, glyphs in text order.
       // A glyph is a single character's unless it's a ligature (it covers several).
       const single = (gi: number, cp: number) => {
@@ -138,12 +163,12 @@ function collectFrom(root: DesignNode, glyphPaths: string[], sets: Map<string, O
       for (let gi = 0; gi < t.glyphs.length; gi++) {
         const g = t.glyphs[gi];
         const run = runAt(g.char);
-        if (!run) continue;
+        if (!run || !mapped(g.char)) continue;
         const key: FontKey = { family: run.font.family, weight: run.font.weight, italic: run.font.italic };
         const ks = fontKeyString(key);
         let set = sets.get(ks);
         if (!set) sets.set(ks, (set = { key, glyphs: new Map(), steps: new Map(), alternates: new Set(), ascents: [], ascentEm: 0, descentEm: 0 }));
-        const cp = t.characters.codePointAt(g.char);
+        const cp = shown.codePointAt(g.char);
         if (cp === undefined || g.fontSize <= 0) continue;
         if (!single(gi, cp) && g.outline >= 0) continue;
         const path = g.outline >= 0 ? (glyphPaths[g.outline] ?? null) : null;
@@ -154,8 +179,8 @@ function collectFrom(root: DesignNode, glyphPaths: string[], sets: Map<string, O
         // The step to the next glyph, when both are plain single characters of
         // this run on the same line, left to right.
         const h = t.glyphs[gi + 1];
-        const cp2 = h ? t.characters.codePointAt(h.char) : undefined;
-        if (!h || cp2 === undefined || runAt(h.char) !== run || h.fontSize !== g.fontSize || h.x <= g.x) continue;
+        const cp2 = h ? shown.codePointAt(h.char) : undefined;
+        if (!h || cp2 === undefined || !mapped(h.char) || runAt(h.char) !== run || h.fontSize !== g.fontSize || h.x <= g.x) continue;
         if (!single(gi, cp) || !single(gi + 1, cp2) || lineAt(g.char) !== lineAt(h.char) || isBreak(cp) || isBreak(cp2)) continue;
         const pair = `${cp},${cp2}`;
         const step = (h.x - g.x - run.letterSpacing) / g.fontSize;

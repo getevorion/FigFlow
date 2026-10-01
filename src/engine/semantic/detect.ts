@@ -27,11 +27,33 @@ function innerSurfaces(s: El): El[] {
 function isRound(e: El): boolean {
   return e.node.kind === "ELLIPSE" || e.radius >= Math.min(e.box.w, e.box.h) / 2 - 1.5;
 }
-function nearestLabel(scene: Scene, box: Rect, maxGap: number, exclude: Set<El>): El | null {
+/**
+ * Whether a text can name a control: no card holds one of them without the other. A text on the
+ * card beside a control names something else however close, even where a plate painted over both
+ * cards makes them one surface to the eye's paint order. (A pill around a label isn't a card, nor
+ * is a shape a control only partly overlaps.)
+ */
+function sameCard(control: { box: Rect; z: number }, text: El, scene: Scene): boolean {
+  // A card: a plate you can see, well bigger than what it holds. A glow (a blurred or round shape
+  // spreading behind several cards) isn't one, and a panel painted over a text (a drop-down open
+  // over the page) covers it rather than holding it.
+  const card = (s: El, inner: Rect) =>
+    area(s.box) >= Math.max(2000, area(inner) * 8) && s.node.kind !== "ELLIPSE" && !s.node.effects.some((f) => f.visible && f.type === "LAYER_BLUR") && visibleBox(s);
+  for (const s of scene.all) {
+    if ((s.role !== "surface" && s.role !== "image") || s.box === control.box || s === text) continue;
+    const hasControl = s.z < control.z && mostlyInside(control.box, s.box, 0.99);
+    const hasText = s.z < text.z && mostlyInside(text.ink, s.box, 0.99);
+    if (hasControl !== hasText && card(s, hasControl ? control.box : text.ink)) return false;
+  }
+  return true;
+}
+
+function nearestLabel(scene: Scene, box: Rect, maxGap: number, exclude: Set<El>, control?: { box: Rect; z: number }): El | null {
   let best: El | null = null;
   let bestD = Infinity;
   for (const e of scene.all) {
     if (e.role !== "text" || exclude.has(e) || !e.text?.trim()) continue;
+    if (control && !sameCard(control, e, scene)) continue;
     if (!sameRow(e.box, box, 0.45)) continue;
     const gap = e.box.x >= box.x + box.w ? e.box.x - (box.x + box.w) : box.x >= e.box.x + e.box.w ? box.x - (e.box.x + e.box.w) : -1;
     if (gap < 0 || gap > maxGap) continue;
@@ -48,7 +70,37 @@ function claimedNodes(els: El[]): DesignNode[] {
 }
 
 function stroked(e: El): boolean {
-  return !!e.node.stroke && e.node.strokes.some((p) => p.visible);
+  return !!e.node.stroke && e.node.strokes.some((p) => p.visible && p.opacity > 0.02);
+}
+
+/** A box you can see: a fill, an outline or a picture. Clear paints only lay things out. */
+function visibleBox(s: El): boolean {
+  return s.hasImage || (s.fill?.a ?? 0) >= 0.02 || stroked(s);
+}
+
+/** A line along a box's bottom edge: an underlined field's only outline. */
+function underlined(s: El, scene: Scene): boolean {
+  const bottom = s.box.y + s.box.h;
+  return scene.all.some((e) => e.role === "line" && e.box.w >= s.box.w * 0.8 && Math.abs(center(e.box).y - bottom) <= 3 && Math.abs(e.box.x - s.box.x) <= s.box.w * 0.1);
+}
+
+/** Names that say nothing about what a layer shows ("Vector", "Group 12", "Ellipse 17"). */
+const GENERIC_NAME = /^(?:vector|icon|group|frame|union|subtract|intersect|exclude|shape|path|ellipse|rectangle|rect|polygon|star|line|image|layer|component|instance|mark|glyph|boolean|mask group|слой)?(?:[\s_-]*\d+)*$/i;
+/** A tick's own names: "check", "check-small", "circle-check", "Checkmark", "icon/check", "tick", "done". */
+const CHECK_WORDS = new Set(["check", "checked", "checkmark", "tick", "ticked", "done", "mark", "icon", "ic", "circle", "square", "box", "checkbox", "indicator", "selection", "small", "sm", "md", "lg", "bold", "thin", "fill", "filled", "outline", "on", "selected", "state", "vector"]);
+
+/**
+ * An icon that pictures something (a shield, a router, a gauge): named for it, not a check mark's
+ * name and not a default layer name. A box holding one is an icon tile, not a checked checkbox.
+ */
+function pictogram(e: El): boolean {
+  const names = [e.node.name, ...e.node.children.filter((c) => c.visible).map((c) => c.name)];
+  return names.some((raw) => {
+    const name = raw.trim().toLowerCase();
+    if (GENERIC_NAME.test(name)) return false;
+    const words = name.split(/[\s/_:.-]+/).filter(Boolean);
+    return words.length > 0 && !words.every((w) => CHECK_WORDS.has(w) || /^\d+$/.test(w)) && !/^[✓✔☑]/.test(name);
+  });
 }
 
 /** HSV saturation, 0 (gray) to 1. */
@@ -77,11 +129,11 @@ function fontSizeOf(e: El): number {
 function captionFor(s: El, scene: Scene, own: El[]): El | null {
   const skip = new Set(own);
   const above = scene.all.filter(
-    (e) => e.role === "text" && !skip.has(e) && shortLine(e) && e.box.y + e.box.h <= s.box.y + 1 && s.box.y - (e.box.y + e.box.h) <= 56 && Math.abs(e.box.x - s.box.x) <= 32,
+    (e) => e.role === "text" && !skip.has(e) && shortLine(e) && sameCard(s, e, scene) && e.box.y + e.box.h <= s.box.y + 1 && s.box.y - (e.box.y + e.box.h) <= 56 && Math.abs(e.box.x - s.box.x) <= 32,
   );
   const heading = above.sort((a, b) => fontSizeOf(b) - fontSizeOf(a) || b.box.y - a.box.y)[0];
   if (heading) return heading;
-  return scene.all.find((e) => e.role === "text" && !skip.has(e) && shortLine(e) && sameRow(e.box, s.box, 0.45) && e.box.x + e.box.w <= s.box.x && s.box.x - (e.box.x + e.box.w) <= 60) ?? null;
+  return scene.all.find((e) => e.role === "text" && !skip.has(e) && shortLine(e) && sameCard(s, e, scene) && sameRow(e.box, s.box, 0.45) && e.box.x + e.box.w <= s.box.x && s.box.x - (e.box.x + e.box.w) <= 60) ?? null;
 }
 
 /**
@@ -92,7 +144,7 @@ function fieldLabel(s: El, scene: Scene, own: El[]): El | null {
   const skip = new Set(own);
   return (
     scene.all
-      .filter((e) => e.role === "text" && !skip.has(e) && shortLine(e) && e.box.y + e.box.h <= s.box.y + 1 && s.box.y - (e.box.y + e.box.h) <= 16 && Math.abs(e.box.x - s.box.x) <= 16)
+      .filter((e) => e.role === "text" && !skip.has(e) && shortLine(e) && sameCard(s, e, scene) && e.box.y + e.box.h <= s.box.y + 1 && s.box.y - (e.box.y + e.box.h) <= 16 && Math.abs(e.box.x - s.box.x) <= 16)
       .sort((a, b) => b.box.y + b.box.h - (a.box.y + a.box.h))[0] ?? null
   );
 }
@@ -123,7 +175,7 @@ function toggle(s: El, scene: Scene): Candidate | null {
     );
   if (!knob) return null;
   const on = center(knob.box).x > center(s.box).x;
-  const label = nearestLabel(scene, s.box, 260, new Set());
+  const label = nearestLabel(scene, s.box, 260, new Set(), s);
   const els = [s, knob, ...(label ? [label] : [])];
   return {
     kind: "toggle",
@@ -157,7 +209,11 @@ function checkbox(s: El, scene: Scene): Candidate | null {
     (hollow
       ? scene.all.find((e) => e !== s && e.z < s.z && (e.role === "surface" || e.role === "icon") && !e.contents.length && e.box.w < w && e.box.h < h && mostlyInside(e.box, s.box, 0.95) && centeredIn(e.box, s.box, w * 0.2, h * 0.2))
       : undefined);
-  const label = nearestLabel(scene, s.box, 48, new Set());
+  // A tile holding a picture (a shield, a router) is an icon tile beside a heading, not a checked box.
+  if (mark?.role === "icon" && pictogram(mark)) return null;
+  // A checkbox's label sits level with the box; a heading beside an icon tile rides above its subtitle.
+  const beside = nearestLabel(scene, s.box, 48, new Set(), s);
+  const label = beside && Math.abs(center(beside.ink).y - center(s.box).y) <= Math.max(3, h * 0.2) ? beside : null;
   if (!label && !mark) return null;
   // Empty boxes are outlined or neutral: a filled dot with a caption is a status light
   // ("● Undetected"), a coloured square a swatch.
@@ -213,9 +269,9 @@ function slider(s: El, scene: Scene): Candidate | null {
       ((thumb && Math.abs(center(e.ink).x - center(thumb.box).x) <= 16 && Math.abs(center(e.ink).y - cy) <= 28) || (sameRow(e.box, bar, 0.6) && e.box.x >= x1 && e.box.x - x1 <= 60)),
   );
   // Its label: a text beside it on its row, else the heading above it, lined up with it.
-  const left = nearestLabel(scene, bar, 80, new Set(shown ? [shown] : []));
+  const left = nearestLabel(scene, bar, 80, new Set(shown ? [shown] : []), s);
   const beside = left && left.box.x + left.box.w <= bar.x ? left : null;
-  const above = scene.all.filter((e) => e.role === "text" && e !== shown && !!e.text?.trim() && e.box.y + e.box.h <= bar.y + 1 && bar.y - (e.box.y + e.box.h) <= 64 && Math.abs(e.box.x - x0) <= 28);
+  const above = scene.all.filter((e) => e.role === "text" && e !== shown && !!e.text?.trim() && sameCard(s, e, scene) && e.box.y + e.box.h <= bar.y + 1 && bar.y - (e.box.y + e.box.h) <= 64 && Math.abs(e.box.x - x0) <= 28);
   const label = (beside && !NUMERIC.test(beside.text!.trim()) ? beside : null) ?? above.sort((a, b) => fontSizeOf(b) - fontSizeOf(a) || b.box.y - a.box.y)[0] ?? null;
   // A grip or dot drawn on the thumb moves with it.
   const mark = thumb && thumb.contents.length === 1 && mostlyInside(thumb.contents[0].box, thumb.box, 0.95) ? thumb.contents[0] : undefined;
@@ -237,6 +293,8 @@ function field(s: El, scene: Scene): Candidate | null {
   const { w, h } = s.box;
   // Compact drop-downs in dense menus run 16-20 px tall; typing boxes are taller.
   if (h < 16 || h > 76 || w < h * 3) return null;
+  // A field shows where to click and type: grey words on an invisible box are a list row's label.
+  if (!visibleBox(s) && !underlined(s, scene)) return null;
   const texts = directTexts(s);
   const icons = directIcons(s);
   // A magnifier at the right end makes a search box, not a drop-down.
@@ -374,6 +432,8 @@ function button(s: El, scene: Scene): Candidate | null {
   // A wide row with its content bunched at one end is a header or list row, not a button.
   if (!centered && w > 320 && content.w < w * 0.4) return null;
   if (texts.length) {
+    // A big dial or tile showing a number ("−67 dBm", "78%") is a readout, not something to press.
+    if (NUMERIC.test(texts[0].text!.trim()) && Math.min(w, h) >= 64 && !BUTTON_NAME.test(`${s.node.name} ${s.parent?.node.name ?? ""}`)) return null;
     const c = contrast(textColor(texts[0]), s.fill);
     if (c < 2.2 && (s.fill?.a ?? 0) >= 0.25 && !BUTTON_NAME.test(s.node.name)) return null; // reads like a placeholder, not a label
     // A sentence on a plate is a message banner; button labels are a few words.
@@ -385,6 +445,12 @@ function button(s: El, scene: Scene): Candidate | null {
   }
   const iconOnly = !texts.length;
   if (iconOnly && (w / h > 1.8 || w > 96)) return null;
+  // A tile leading a heading or a list row (an icon, an initial) illustrates it: nothing to press.
+  // Arrows, menus and closes beside a title (a back button) are still pressed, and so is a solid
+  // accent plate (a call to action beside its caption).
+  const glyphNames = [s.node.name, s.parent?.node.name ?? "", ...icons.map((i) => i.node.name)].join(" ");
+  const accent = !!s.fill && s.fill.a > 0.9 && saturation(s.fill) > 0.35;
+  if ((iconOnly || (texts.length === 1 && texts[0].text!.trim().length <= 2)) && !accent && leadsText(s, scene) && !NAV_ICON.test(glyphNames) && !BUTTON_NAME.test(glyphNames)) return null;
   // An icon plate with its caption underneath (a sidebar or tab-bar item): the caption is its label.
   const caption = iconOnly ? captionBelow(s, scene) : null;
   const label = texts[0] ?? caption ?? undefined;
@@ -411,6 +477,17 @@ function button(s: El, scene: Scene): Candidate | null {
   };
 }
 
+/** Glyphs that act wherever they sit: back, menu, close, more. */
+const NAV_ICON = /arrow|chevron|caret|back|menu|hamburger|close|(?<![a-z])x(?![a-z])|more|dots|ellipsis|kebab/i;
+
+/** Text starting just right of a plate and level with it: the plate leads a heading or a row. */
+function leadsText(s: El, scene: Scene): boolean {
+  const right = s.box.x + s.box.w;
+  return scene.all.some(
+    (e) => e.role === "text" && !!e.text?.trim() && e.host !== s && sameCard(s, e, scene) && e.ink.x >= right - 1 && e.ink.x - right <= 24 && e.ink.y >= s.box.y - 4 && e.ink.y + e.ink.h <= s.box.y + s.box.h + 4,
+  );
+}
+
 /** A short text right under a plate, centred on it, not sitting on a small surface of its own. */
 function captionBelow(s: El, scene: Scene): El | null {
   const bottom = s.box.y + s.box.h;
@@ -424,9 +501,53 @@ function captionBelow(s: El, scene: Scene): El | null {
         e.ink.y - bottom <= 20 &&
         Math.abs(center(e.ink).x - cx) <= Math.max(6, s.box.w * 0.15) &&
         e.ink.w <= s.box.w * 2.4 &&
+        sameCard(s, e, scene) &&
         (!e.host || area(e.host.box) > area(s.box) * 4),
     ) ?? null
   );
+}
+
+/**
+ * An instance of a component named for a checkbox or radio ("Checkbox", a set "Checkboxes") that
+ * recognition sees as one picture (its box and tick inside an icon-like group): the box is the
+ * biggest square it paints (a clear state layer around it doesn't count), the mark what's drawn on
+ * it, checked as its variant says ("Type=Selected") or else by the mark.
+ */
+function namedCheck(e: El, scene: Scene): Candidate | null {
+  const n = e.node;
+  const kind = [n.component?.set?.name, n.component?.name, n.name].map((x) => (x ? widgetKindFromName(x) : null)).find(Boolean);
+  if (kind !== "checkbox" && kind !== "radio") return null;
+  const inside: DesignNode[] = [];
+  const walk = (x: DesignNode) => {
+    if (!x.visible) return;
+    inside.push(x);
+    x.children.forEach(walk);
+  };
+  walk(n);
+  const painted = (x: DesignNode) => x.fills.some((p) => p.visible && p.opacity > 0.02) || (!!x.stroke && x.strokes.some((p) => p.visible && p.opacity > 0.02));
+  const box = inside
+    .filter((x) => x !== n && painted(x) && x.box.w >= 9 && x.box.w <= 34 && Math.abs(x.box.w - x.box.h) <= Math.max(2, x.box.w * 0.15))
+    .sort((a, b) => area(b.box) - area(a.box))[0];
+  if (!box) return null;
+  const mark = inside.slice(inside.indexOf(box) + 1).find((x) => !x.children.length && painted(x) && mostlyInside(x.box, box.box, 0.9) && area(x.box) < area(box.box));
+  const variant = `${n.component?.name ?? ""} ${n.name}`;
+  const on = /=\s*(?:selected|checked|on|true|yes|indeterminate)\b/i.test(variant);
+  const off = /=\s*(?:unselected|unchecked|off|false|no|empty|none)\b/i.test(variant);
+  // Its label: on its row and card, level with the box.
+  const beside = nearestLabel(scene, box.box, 260, new Set(), { box: box.box, z: e.z });
+  const label = beside && Math.abs(center(beside.ink).y - center(box.box).y) <= Math.max(4, box.box.h * 0.35) ? beside : null;
+  const set = n.component?.set?.name ?? n.component?.name ?? n.name;
+  return {
+    kind,
+    nodes: [n],
+    claimed: [...subtree(e), ...(label ? [label] : [])],
+    rect: unionRect([box.box, ...(label ? [label.box] : [])]),
+    surface: box,
+    label: label ? { node: label.node, text: label.text!.trim() } : undefined,
+    parts: { box, mark },
+    value: on ? true : off ? false : !!mark,
+    evidence: { score: 0.9, reasons: [`instance of the component "${set}"${n.component?.name && n.component.name !== set ? ` (${n.component.name})` : ""}`] },
+  };
 }
 
 /** Anything with a prototype click is interactive, whatever it looks like. */
@@ -450,8 +571,11 @@ function prototypeClick(e: El): Candidate | null {
 /** Close / minimize / maximize marks along the top-right edge. */
 function windowButtons(scene: Scene): Candidate[] {
   const { x: W, y: H } = scene.size;
-  const zone: Rect = { x: W * 0.6, y: 0, w: W * 0.4, h: Math.max(48, H * 0.16) };
-  const marks = scene.all.filter((e) => (e.role === "icon" || (e.role === "surface" && !e.contents.length)) && e.box.w >= 6 && e.box.w <= 40 && e.box.h <= 40 && mostlyInside(e.box, zone, 0.9) && !e.text);
+  // The title bar's strip, whatever the window's height (a card's corner dot below it isn't a close button).
+  const zone: Rect = { x: W * 0.6, y: 0, w: W * 0.4, h: Math.min(72, Math.max(48, H * 0.16)) };
+  // On the window itself: a wide bar, or a panel or picture reaching its top edge (a card floats below it).
+  const onBar = (e: El) => !e.host || e.host.box.w >= W * 0.5 || e.host.box.y <= 2;
+  const marks = scene.all.filter((e) => (e.role === "icon" || (e.role === "surface" && !e.contents.length)) && e.box.w >= 6 && e.box.w <= 40 && e.box.h <= 40 && mostlyInside(e.box, zone, 0.9) && onBar(e) && !e.text);
   const named = (e: El) => {
     const n = `${e.node.name} ${e.parent?.node.name ?? ""}`.toLowerCase();
     if (/close|exit|\bx\b|cross|clear/.test(n)) return "close";
@@ -693,6 +817,8 @@ export function detectWidgets(root: DesignNode, opts: { exclude?: Set<string>; s
     }
     const proto = prototypeClick(e);
     if (proto) candidates.push(proto);
+    const named = namedCheck(e, scene);
+    if (named) candidates.push(named);
   }
 
   // 2. Anatomy on every surface.

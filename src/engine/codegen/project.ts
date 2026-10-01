@@ -355,6 +355,16 @@ function finish(file: GeneratedFile): GeneratedFile {
   return file;
 }
 
+/** The layers controls draw themselves (see PlanOptions.keepApart). */
+function partIds(widgets: Widget[]): Set<string> {
+  const ids = new Set<string>();
+  for (const w of widgets) {
+    if (w.surface) ids.add(w.surface.id);
+    for (const p of Object.values(w.parts)) if (p) ids.add(p.id);
+  }
+  return ids;
+}
+
 export async function generateProject(opts: GenerateOptions): Promise<GeneratedProject> {
   const { fig, frameId } = opts;
   const timings: Record<string, number> = {};
@@ -409,7 +419,7 @@ export async function generateProject(opts: GenerateOptions): Promise<GeneratedP
     const overlays = [...flow.popups.filter((p) => p.source === s.id && !p.popup.overlay).map((p) => p.popup.root), ...flow.toasts.filter((t) => t.source === s.id).flatMap((t) => t.toast.members)];
     const skip = new Set(overlays.map((n) => n.id));
     const inOverlay = new Set(overlays.flatMap((n) => [...subtreeIds(n)]));
-    const plan = planFor(s.built, s.built.root, { sections: true, skip });
+    const plan = planFor(s.built, s.built.root, { sections: true, skip, keepApart: partIds(s.analysis.widgets) });
     const widgets = s.analysis.widgets.filter((w) => !w.nodes.some((n) => inOverlay.has(n.id)));
     widgets.forEach(retarget);
     const ex = extractControls(plan, widgets, s.analysis.navs);
@@ -423,7 +433,7 @@ export async function generateProject(opts: GenerateOptions): Promise<GeneratedP
     p.widgets.forEach(retarget);
     if (p.popup.overlay) {
       const o = p.popup.overlay;
-      const plan = planFor(p.built, p.built.root, { sections: false });
+      const plan = planFor(p.built, p.built.root, { sections: false, keepApart: partIds(p.widgets) });
       const ex = extractControls(plan, p.widgets, []);
       for (const n of ex.notes) warnings.push({ code: "control", message: `${p.popup.name}: ${n}` });
       const size = { x: p.built.root.size.x, y: p.built.root.size.y };
@@ -440,7 +450,7 @@ export async function generateProject(opts: GenerateOptions): Promise<GeneratedP
       continue;
     }
     const skip = new Set(flow.toasts.filter((t) => t.source === p.source).flatMap((t) => t.toast.members.map((m) => m.id)));
-    const plan = planFor(p.built, p.built.root, { sections: false, only: [p.popup.root], skip });
+    const plan = planFor(p.built, p.built.root, { sections: false, only: [p.popup.root], skip, keepApart: partIds(p.widgets) });
     const ex = extractControls(plan, p.widgets, []);
     for (const n of ex.notes) warnings.push({ code: "control", message: `${p.popup.name}: ${n}` });
     popups.push({
