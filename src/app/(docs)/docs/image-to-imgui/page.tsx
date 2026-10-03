@@ -1,4 +1,4 @@
-import { C, DocHeader, H2, Note, P, Pager, Steps, Table } from "@/components/docs/prose";
+import { C, DocHeader, H2, Note, P, Pager, Step, Steps, Table } from "@/components/docs/prose";
 
 export const metadata = { title: "Image vs .fig → ImGui" };
 
@@ -18,26 +18,20 @@ export default function ImageToImGuiDocs() {
         Treat the PNG as the whole specification. Analyse it into <C>spec.md</C> (regions, control bounds, radii, spacing). Sample colours with a script — do not pick hex values by eye. Show the spec to someone who knows the design, fix it, then write theme + layout + widgets. Build, capture a render, and compare with{" "}
         <strong>magnified crops</strong> of toggles, sliders, tabs, and combos — not a single full-screen diff.
       </P>
-      <Steps
-        items={[
-          {
-            title: "Analyse",
-            body: "Image → spec.md. Colours from pixel probes and region samples, not from looking at the picture.",
-          },
-          {
-            title: "Checkpoint",
-            body: "Confirm inferred hover states, fonts, and icons. A still image cannot prove those.",
-          },
-          {
-            title: "Generate",
-            body: "Theme table first, then layout, then only the widgets that do not already exist in your project.",
-          },
-          {
-            title: "Compare",
-            body: "Rebuild in a loop until zoomed regions match a detail checklist.",
-          },
-        ]}
-      />
+      <Steps>
+        <Step title="Analyse">
+          <p>Image → spec.md. Colours from pixel probes and region samples, not from looking at the picture.</p>
+        </Step>
+        <Step title="Checkpoint">
+          <p>Confirm inferred hover states, fonts, and icons. A still image cannot prove those.</p>
+        </Step>
+        <Step title="Generate">
+          <p>Theme table first, then layout, then only the widgets that do not already exist in your project.</p>
+        </Step>
+        <Step title="Compare">
+          <p>Rebuild in a loop until zoomed regions match a detail checklist.</p>
+        </Step>
+      </Steps>
 
       <H2>When you have a .fig file</H2>
       <P>
