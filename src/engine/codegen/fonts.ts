@@ -17,7 +17,7 @@
  * Figma applied between the letter pairs the design uses (see ff::KernPair).
  */
 import { createHash } from "node:crypto";
-import opentype from "opentype.js";
+import { Font, Glyph, Path, parse as parseOpenType } from "opentype.js";
 import { applyCase } from "../model/text";
 import type { DesignNode, TextData } from "../model/types";
 import { snake } from "./cpp";
@@ -210,8 +210,8 @@ function collectFrom(root: DesignNode, glyphPaths: string[], sets: Map<string, O
 }
 
 /** Parses our own em-space path data (M/L/Q/C/Z, y down) into opentype commands in font units (y up). */
-function pathFromEm(d: string, upm: number): opentype.Path {
-  const p = new opentype.Path();
+function pathFromEm(d: string, upm: number): Path {
+  const p = new Path();
   const tokens = d.match(/[MLQCZ]|-?\d*\.?\d+(?:e-?\d+)?/g) ?? [];
   let i = 0;
   const num = () => Number(tokens[i++]);
@@ -282,11 +282,11 @@ export function buildOutlineFont(set: OutlineSet): Uint8Array {
   const desc = set.lineHeightEm && ascents.length ? set.lineHeightEm - asc : set.descentEm || 0.25;
   const ascender = Math.round(asc * upm);
   const descender = -Math.round(Math.max(0, desc) * upm);
-  const glyphs: opentype.Glyph[] = [new opentype.Glyph({ name: ".notdef", unicode: 0, advanceWidth: Math.round(upm * 0.5), path: new opentype.Path() })];
+  const glyphs: Glyph[] = [new Glyph({ name: ".notdef", unicode: 0, advanceWidth: Math.round(upm * 0.5), path: new Path() })];
   for (const [cp, g] of drawable(set)) {
-    const path = g.path ? pathFromEm(g.path, upm) : new opentype.Path();
+    const path = g.path ? pathFromEm(g.path, upm) : new Path();
     glyphs.push(
-      new opentype.Glyph({
+      new Glyph({
         name: cp === 0x20 ? "space" : `uni${cp.toString(16).toUpperCase().padStart(4, "0")}`,
         unicode: cp,
         advanceWidth: Math.max(0, Math.round(g.advanceEm * upm)),
@@ -295,7 +295,7 @@ export function buildOutlineFont(set: OutlineSet): Uint8Array {
     );
   }
   // A neutral name: this is a subset of someone's font, not the font itself.
-  const font = new opentype.Font({
+  const font = new Font({
     familyName: "Design glyphs",
     styleName: `${WEIGHT_NAMES[set.key.weight] ?? set.key.weight}${set.key.italic ? " italic" : ""}`,
     unitsPerEm: upm,
@@ -307,16 +307,16 @@ export function buildOutlineFont(set: OutlineSet): Uint8Array {
 }
 
 /** Font files parsed before, by content: Inter and a family's download come back project after project. */
-const parsed = new Map<string, opentype.Font | null>();
+const parsed = new Map<string, Font | null>();
 const PARSED_KEPT = 16;
 
 /** `keep`: the file is likely to come back (not one built for this design), so it's kept parsed. */
-function parseFont(bytes: Uint8Array, keep = false): opentype.Font | null {
+function parseFont(bytes: Uint8Array, keep = false): Font | null {
   const key = keep ? createHash("sha1").update(bytes).digest("base64") : null;
   if (key && parsed.has(key)) return parsed.get(key)!;
-  let font: opentype.Font | null = null;
+  let font: Font | null = null;
   try {
-    font = opentype.parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+    font = parseOpenType(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
   } catch {
     font = null;
   }
@@ -331,7 +331,7 @@ function parseFont(bytes: Uint8Array, keep = false): opentype.Font | null {
  * The advance ImGui will use for a character, in em: from the first of the
  * face's merged fonts that has it (as ImGui picks them), or null.
  */
-function advanceSource(fonts: Array<opentype.Font | null>): (cp: number) => number | null {
+function advanceSource(fonts: Array<Font | null>): (cp: number) => number | null {
   const cache = new Map<number, number | null>();
   return (cp) => {
     const known = cache.get(cp);

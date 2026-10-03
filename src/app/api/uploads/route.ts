@@ -1,6 +1,9 @@
-import { after, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { UploadError, readDesign, receiveUpload } from "@/server/convert";
+import { usesBlob } from "@/server/data/io";
 import { ownerId } from "@/server/owner";
+
+export const maxDuration = 300;
 import { listUploads, sweep } from "@/server/store";
 import { noStore, uploadView } from "@/server/views";
 
@@ -21,6 +24,9 @@ function cleanName(raw: string | null): string {
  * in X-File-Name. The body is streamed to disk and checked as it arrives.
  */
 export async function POST(req: NextRequest) {
+  if (usesBlob()) {
+    return Response.json({ error: "Direct upload is disabled here. Refresh the page and try again." }, { status: 501, headers: noStore });
+  }
   const owner = await ownerId(true);
   const fileName = cleanName(req.headers.get("x-file-name"));
   if (!/\.fig$/i.test(fileName)) return Response.json({ error: "Upload a .fig file. In Figma, use File → Save local copy." }, { status: 415, headers: noStore });
@@ -29,10 +35,8 @@ export async function POST(req: NextRequest) {
   const declared = length && /^\d+$/.test(length) ? Number(length) : null;
   try {
     const rec = await receiveUpload(req.body, fileName, declared, owner);
-    after(async () => {
-      await readDesign(rec);
-      await sweep();
-    });
+    await readDesign(rec);
+    await sweep();
     return Response.json({ id: rec.id }, { status: 201, headers: noStore });
   } catch (e) {
     if (e instanceof UploadError) return Response.json({ error: e.message }, { status: e.status, headers: noStore });

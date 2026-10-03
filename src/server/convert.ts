@@ -1,8 +1,7 @@
 import "server-only";
-import { createWriteStream, existsSync } from "node:fs";
-import { open as openFile, rm } from "node:fs/promises";
-import { once } from "node:events";
 import { timingSafeEqual } from "node:crypto";
+import { after } from "next/server";
+import { pathExists, readBytes, removeTree, streamToPath, usesBlob } from "./data/io";
 import { engine, openDesign } from "./engine/pool";
 import { ownerId } from "./owner";
 import { fontCacheDir, runtimeDir } from "./paths";
@@ -41,16 +40,14 @@ export class UploadError extends Error {
   }
 }
 
-/** A .fig starts with the kiwi header or is a ZIP holding one. */
+export function looksLikeFigBytes(file: Buffer): boolean {
+  if (file.length < 4) return false;
+  return file.subarray(0, 8).toString("latin1") === "fig-kiwi" || (file[0] === 0x50 && file[1] === 0x4b && file[2] === 0x03 && file[3] === 0x04);
+}
+
 async function looksLikeFig(path: string): Promise<boolean> {
-  const f = await openFile(path, "r");
-  try {
-    const head = Buffer.alloc(8);
-    await f.read(head, 0, 8, 0);
-    return head.toString("latin1") === "fig-kiwi" || (head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04);
-  } finally {
-    await f.close();
-  }
+  const file = await readBytes(path);
+  return file ? looksLikeFigBytes(file) : false;
 }
 
 /** Live uploads one browser may have, and the space all uploads may take (FIGFLOW_MAX_STORE_GB). */
@@ -58,39 +55,37 @@ const MAX_PER_OWNER = 10;
 const MAX_STORE_BYTES = Number(process.env.FIGFLOW_MAX_STORE_GB ?? 20) * 1024 ** 3;
 
 /**
- * Streams a request body to disk as a new upload, counting bytes as they
+ * Streams a request body to storage as a new upload, counting bytes as they
  * arrive: nothing is buffered in memory, and the upload stops at the limit.
  */
-export async function receiveUpload(body: ReadableStream<Uint8Array>, fileName: string, declared: number | null, owner: string): Promise<UploadRecord> {
+export async function assertUploadAllowed(owner: string, declared: number | null): Promise<void> {
   if (declared !== null && declared > MAX_UPLOAD_BYTES) throw new UploadError(`The file is larger than ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, 413);
   const live = await allUploads();
   if (live.filter((u) => u.owner === owner).length >= MAX_PER_OWNER)
     throw new UploadError(`You have ${MAX_PER_OWNER} files here already. Delete one, or wait for the oldest to expire.`, 429);
-  // Uploads count at their size, or at the limit while the size isn't known.
   if (live.reduce((n, u) => n + u.size, 0) + (declared ?? MAX_UPLOAD_BYTES) > MAX_STORE_BYTES)
     throw new UploadError("Figflow is full right now. Try again in a little while.", 503);
+}
+
+export async function prepareUpload(fileName: string, owner: string, declared: number | null): Promise<UploadRecord> {
+  await assertUploadAllowed(owner, declared);
   const rec: UploadRecord = { id: newId(), owner, fileName, size: 0, createdAt: Date.now(), state: "reading" };
   await createUpload(rec);
+  return rec;
+}
+
+export async function receiveUpload(body: ReadableStream<Uint8Array>, fileName: string, declared: number | null, owner: string): Promise<UploadRecord> {
+  if (usesBlob()) throw new UploadError("Use client upload on this deployment.", 501);
+  const rec = await prepareUpload(fileName, owner, declared);
   const path = designPath(rec.id);
-  const out = createWriteStream(path, { flags: "wx" });
-  const reader = body.getReader();
   try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      rec.size += value.byteLength;
-      if (rec.size > MAX_UPLOAD_BYTES) throw new UploadError(`The file is larger than ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, 413);
-      if (!out.write(value)) await once(out, "drain");
-    }
-    out.end();
-    await once(out, "finish");
+    rec.size = await streamToPath(path, body, MAX_UPLOAD_BYTES);
     if (declared !== null && rec.size !== declared) throw new UploadError("The upload was cut short. Try again.", 400);
     if (rec.size === 0) throw new UploadError("The file is empty.", 400);
     if (!(await looksLikeFig(path))) throw new UploadError("That isn't a .fig file. In Figma, use File → Save local copy.", 415);
   } catch (e) {
-    reader.cancel().catch(() => undefined);
-    out.destroy();
-    await rm(uploadDir(rec.id), { recursive: true, force: true }).catch(() => undefined);
+    if (e instanceof Error && e.message === "too-large") throw new UploadError(`The file is larger than ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`, 413);
+    await removeTree(uploadDir(rec.id));
     throw e instanceof UploadError ? e : new UploadError("The upload failed. Try again.", 400);
   }
   await saveUpload(rec);
@@ -111,7 +106,6 @@ function projectNameOf(fileName: string): string | undefined {
  * picks the frame the app starts on and makes the project from it.
  */
 export async function readDesign(rec: UploadRecord): Promise<void> {
-  // Only the engine's verdict on the file is "couldn't read": the store's own errors are the server's.
   let design: NonNullable<UploadRecord["design"]>;
   try {
     design = await openDesign(rec.id, designPath(rec.id));
@@ -126,7 +120,24 @@ export async function readDesign(rec: UploadRecord): Promise<void> {
   const start = await engine(rec.id, designPath(rec.id), "pick", {}).catch(() => null);
   const ready: UploadRecord = { ...rec, state: "ready", design, ...(start ? { start } : {}) };
   await saveUpload(ready);
-  if (ready.start) await buildProject(await newProject(ready, ready.start.frame));
+  if (ready.start) {
+    const project = await newProject(ready, ready.start.frame);
+    after(() => buildProject(project));
+  }
+}
+
+export async function finalizeBlobUpload(rec: UploadRecord, size: number): Promise<void> {
+  if (size === 0) {
+    await removeTree(uploadDir(rec.id));
+    throw new UploadError("The file is empty.", 400);
+  }
+  if (!(await looksLikeFig(designPath(rec.id)))) {
+    await removeTree(uploadDir(rec.id));
+    throw new UploadError("That isn't a .fig file. In Figma, use File → Save local copy.", 415);
+  }
+  rec.size = size;
+  await saveUpload(rec);
+  after(() => readDesign(rec));
 }
 
 /** Starts a project, named after the design file; the record is saved as it goes (working, then ready or failed). */
@@ -163,7 +174,7 @@ const making = new Map<string, Promise<unknown>>();
 
 /** A file the worker makes on first request and keeps (thumbnails, previews); requests for it meanwhile share the one job. */
 export async function cached(path: string, make: () => Promise<unknown>): Promise<string> {
-  if (existsSync(path)) return path;
+  if (await pathExists(path)) return path;
   let job = making.get(path);
   if (!job) {
     job = make().finally(() => making.delete(path));

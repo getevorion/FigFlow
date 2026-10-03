@@ -24,7 +24,7 @@ export function H2({ children }: { children: string }) {
     <h2 id={id} className="group mt-12 mb-4 scroll-mt-24 text-[1.3rem] font-semibold tracking-[-0.02em]">
       <a href={`#${id}`} className="outline-none">
         {children}
-        <span className="ml-2 text-brand-soft/0 transition-colors group-hover:text-brand-soft/70" aria-hidden>
+        <span className="ml-2 text-brand-soft/0 group-hover:text-brand-soft/70" aria-hidden>
           #
         </span>
       </a>
@@ -41,23 +41,23 @@ export function P({ children, className }: { children: React.ReactNode; classNam
 }
 
 export function C({ children }: { children: React.ReactNode }) {
-  return <code className="rounded-[5px] border border-[#262626] bg-[#141414] px-1.5 py-px font-mono text-[0.86em] text-foreground/90">{children}</code>;
+  return <code className="rounded-[5px] border border-[var(--kv-border)] bg-[var(--kv-bg)] px-1.5 py-px font-mono text-[0.86em] text-[var(--kv-text)]">{children}</code>;
 }
 
 export function A({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="text-brand-soft underline decoration-brand-soft/30 underline-offset-[3px] transition-colors hover:decoration-brand-soft">
+    <Link href={href} className="text-brand-soft underline decoration-brand-soft/30 underline-offset-[3px] hover:decoration-brand-soft">
       {children}
     </Link>
   );
 }
 
 export function Ul({ children }: { children: React.ReactNode }) {
-  return <ul className="my-4 space-y-2 pl-5 text-[15px] leading-[1.7] text-foreground/80 marker:text-neutral-400/60 [&>li]:list-disc [&>li]:pl-1">{children}</ul>;
+  return <ul className="my-4 space-y-2 pl-5 text-[15px] leading-[1.7] text-foreground/80 marker:text-[var(--kv-text-muted)] [&>li]:list-disc [&>li]:pl-1">{children}</ul>;
 }
 
 export function Steps({ children }: { children: React.ReactNode }) {
-  return <ol className="my-6 space-y-5 border-l border-[#1c1c1c] pl-6 [counter-reset:step] [&>li]:relative [&>li]:[counter-increment:step] [&>li]:before:absolute [&>li]:before:top-0.5 [&>li]:before:-left-[35px] [&>li]:before:grid [&>li]:before:size-[22px] [&>li]:before:place-items-center [&>li]:before:rounded-full [&>li]:before:bg-[#141414] [&>li]:before:font-mono [&>li]:before:text-[11px] [&>li]:before:text-neutral-400 [&>li]:before:ring-1 [&>li]:before:ring-[#2a2a2a] [&>li]:before:content-[counter(step)]">{children}</ol>;
+  return <ol className="my-6 space-y-5 border-l border-[var(--kv-border)] pl-6 [counter-reset:step] [&>li]:relative [&>li]:[counter-increment:step] [&>li]:before:absolute [&>li]:before:top-0.5 [&>li]:before:-left-[35px] [&>li]:before:grid [&>li]:before:size-[22px] [&>li]:before:place-items-center [&>li]:before:rounded-full [&>li]:before:bg-[var(--kv-surface)] [&>li]:before:font-mono [&>li]:before:text-[11px] [&>li]:before:text-[var(--kv-text-subtle)] [&>li]:before:ring-1 [&>li]:before:ring-[var(--kv-border)] [&>li]:before:content-[counter(step)]">{children}</ol>;
 }
 
 export function Step({ title, children }: { title: string; children: React.ReactNode }) {
@@ -71,8 +71,8 @@ export function Step({ title, children }: { title: string; children: React.React
 
 export function Note({ children }: { children: React.ReactNode }) {
   return (
-    <div className="my-6 flex gap-3 rounded-panel border border-[#222222] bg-[#0d0d0d] px-4 py-3.5 text-[14px] leading-relaxed text-foreground/85">
-      <InfoIcon className="mt-0.5 size-4 shrink-0 text-neutral-400" aria-hidden />
+    <div className="my-6 flex gap-3 rounded-panel border border-[var(--kv-border)] bg-[var(--kv-accent-soft)] px-4 py-3.5 text-[14px] leading-relaxed text-foreground/85">
+      <InfoIcon className="mt-0.5 size-4 shrink-0 text-[var(--kv-accent)]" aria-hidden />
       <div className="min-w-0 [&_p]:my-0">{children}</div>
     </div>
   );
@@ -80,9 +80,9 @@ export function Note({ children }: { children: React.ReactNode }) {
 
 export function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
   return (
-    <div className="my-6 overflow-x-auto rounded-panel border border-[#1c1c1c]">
+    <div className="my-6 overflow-x-auto rounded-panel border border-[var(--kv-border)]">
       <table className="w-full text-left text-[13.5px]">
-        <thead className="bg-[#101010] text-[12px] text-muted-foreground">
+        <thead className="bg-[var(--kv-sidebar)] text-[12px] text-muted-foreground">
           <tr>
             {head.map((h) => (
               <th key={h} className="px-4 py-2.5 font-medium">
@@ -91,7 +91,7 @@ export function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#1c1c1c]">
+        <tbody className="divide-y divide-[var(--kv-border-subtle)]">
           {rows.map((r, i) => (
             <tr key={i} className="align-top">
               {r.map((cell, j) => (
@@ -135,9 +135,9 @@ export function Pager({ href }: { href: string }) {
   const prev = i > 0 ? docsPages[i - 1] : null;
   const next = i >= 0 && i < docsPages.length - 1 ? docsPages[i + 1] : null;
   return (
-    <nav aria-label="More docs" className="mt-16 grid gap-3 border-t border-[#1c1c1c] pt-8 sm:grid-cols-2">
+    <nav aria-label="More docs" className="mt-16 grid gap-3 border-t border-[var(--kv-border)] pt-8 sm:grid-cols-2">
       {prev ? (
-        <Link href={prev.href} className="group rounded-panel border border-[#1c1c1c] px-4 py-3 transition-colors hover:border-[#333333]">
+        <Link href={prev.href} className="group rounded-panel border border-[var(--kv-border)] bg-[var(--kv-surface)] px-4 py-3 hover:border-[#c9cdd4] hover:bg-[var(--kv-surface)]">
           <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
             <ArrowLeftIcon className="size-3.5" aria-hidden /> Previous
           </span>
@@ -147,7 +147,7 @@ export function Pager({ href }: { href: string }) {
         <span />
       )}
       {next && (
-        <Link href={next.href} className="group rounded-panel border border-[#1c1c1c] px-4 py-3 text-right transition-colors hover:border-[#333333]">
+        <Link href={next.href} className="group rounded-panel border border-[var(--kv-border)] bg-[var(--kv-surface)] px-4 py-3 text-right hover:border-[#c9cdd4] hover:bg-[var(--kv-surface)]">
           <span className="flex items-center justify-end gap-1.5 text-[12px] text-muted-foreground">
             Next <ArrowRightIcon className="size-3.5" aria-hidden />
           </span>

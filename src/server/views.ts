@@ -1,5 +1,5 @@
 import "server-only";
-import { readFile } from "node:fs/promises";
+import { readBytes } from "./data/io";
 import type { ProjectSummary, ProjectView, UploadView } from "@/lib/app-types";
 import { RETENTION_MS, type ProjectRecord, type UploadRecord } from "./store";
 
@@ -22,8 +22,29 @@ export const noStore = { "Cache-Control": "no-store" };
 
 export const notFound = () => Response.json({ error: "Not found. Uploads are deleted two hours after they're made." }, { status: 404, headers: noStore });
 
+function safeFilename(name: string) {
+  return name.replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
+export async function zipResponse(absPath: string, filename: string): Promise<Response> {
+  const body = await readBytes(absPath);
+  if (!body || body.length < 4) return notFound();
+  if (body[0] !== 0x50 || body[1] !== 0x4b) return notFound();
+  const name = safeFilename(filename.endsWith(".zip") ? filename : `${filename}.zip`);
+  return new Response(new Uint8Array(body), {
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Length": String(body.length),
+      "Content-Disposition": `attachment; filename="${name}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
 export async function pngResponse(path: string): Promise<Response> {
-  const body = await readFile(path);
+  const body = await readBytes(path);
+  if (!body) return notFound();
   return new Response(new Uint8Array(body), {
     headers: { "Content-Type": "image/png", "Cache-Control": "private, max-age=7200, immutable", "X-Content-Type-Options": "nosniff" },
   });

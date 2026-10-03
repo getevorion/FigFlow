@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readText } from "@/server/data/io";
 import type { NextRequest } from "next/server";
 import { ownedProject } from "@/server/convert";
 import { projectDir } from "@/server/store";
@@ -28,11 +28,15 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/uploads/[id]
   const file = found?.project.manifest?.files.find((f) => f.path === path);
   if (!found || !file) return notFound();
   try {
-    const text = await readFile(join(projectDir(id, project), "files", ...file.path.split("/")), "utf8");
+    const text = (await readText(join(projectDir(id, project), "files", ...file.path.split("/")))) ?? "";
     const lines = text.split("\n").length;
     const lang = langOf(file.path);
+    const plain = req.nextUrl.searchParams.get("plain") === "1";
     let view: FileView;
-    if (file.size <= HIGHLIGHT_BYTES) view = { path, size: file.size, lines, lang, html: await highlight(text, lang) };
+    if (file.size <= HIGHLIGHT_BYTES)
+      view = plain
+        ? { path, size: file.size, lines, lang, text }
+        : { path, size: file.size, lines, lang, text, html: await highlight(text, lang) };
     else if (file.size <= FULL_BYTES) view = { path, size: file.size, lines, lang, text };
     else view = { path, size: file.size, lines, lang, text: text.split("\n").slice(0, HEAD_LINES).join("\n"), truncated: true };
     return Response.json(view, { headers: { "Cache-Control": "private, max-age=3600" } });

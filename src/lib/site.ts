@@ -30,6 +30,11 @@ export const nav = [
   { href: "/docs", label: "Docs" },
 ] as const;
 
+export const productNav = [
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/convert", label: "Convert" },
+] as const;
+
 export const faq: Array<{ q: string; a: string }> = [
   {
     q: "How much does Figflow cost?",

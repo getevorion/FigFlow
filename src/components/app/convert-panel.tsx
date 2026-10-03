@@ -54,7 +54,7 @@ export function ConvertPanel({ upload, frame, projects, pick }: { upload: string
   return (
     <div className="scroll-dark flex h-full flex-col overflow-y-auto">
       <div className="p-4">
-        <div className="overflow-hidden rounded-panel border border-[#1c1c1c]">
+        <div className="overflow-hidden rounded-panel border border-[var(--kv-border)]">
           <FrameThumb upload={upload} frame={frame} />
         </div>
         <h2 className="mt-4 truncate text-[16px] font-semibold tracking-[-0.01em]">{frame.name.trim() || "Untitled"}</h2>
@@ -62,14 +62,14 @@ export function ConvertPanel({ upload, frame, projects, pick }: { upload: string
           {Math.round(frame.width)} × {Math.round(frame.height)} px
         </p>
         {pick?.frame === frame.id && (
-          <p className="mt-3 flex gap-2 rounded-lg border border-[#1c1c1c] bg-[#0b0b0b] px-3 py-2 text-[12px] leading-relaxed text-muted-foreground">
-            <SparklesIcon className="mt-0.5 size-3.5 shrink-0 text-neutral-400" aria-hidden />
+          <p className="mt-3 flex gap-2 rounded-lg border border-[var(--kv-border)] bg-[var(--kv-surface)] px-3 py-2 text-[12px] leading-relaxed text-muted-foreground">
+            <SparklesIcon className="mt-0.5 size-3.5 shrink-0 text-[var(--kv-text-muted)]" aria-hidden />
             <span>Figflow picked this frame: {pick.reason}.</span>
           </p>
         )}
       </div>
 
-      <div className="border-t border-[#1c1c1c] p-4">
+      <div className="border-t border-[var(--kv-border)] p-4">
         <p className="text-[12px] font-medium text-foreground/80">The app starting here</p>
         <AnimatePresence mode="wait" initial={false}>
           {!f || (!f.flow && !f.error) ? (
@@ -91,7 +91,7 @@ export function ConvertPanel({ upload, frame, projects, pick }: { upload: string
           )}
         </AnimatePresence>
         {f?.flow && f.flow.notes.length > 0 && (
-          <details className="group mt-3 rounded-lg border border-[#1c1c1c] bg-[#0b0b0b] px-3 py-2 text-[12px] text-muted-foreground">
+          <details className="group mt-3 rounded-lg border border-[var(--kv-border)] bg-[var(--kv-surface)] px-3 py-2 text-[12px] text-muted-foreground">
             <summary className="cursor-pointer list-none text-foreground/75 marker:hidden">How frames were matched ({f.flow.notes.length})</summary>
             <ul className="mt-2 space-y-1.5 leading-relaxed">
               {f.flow.notes.map((n) => (
@@ -102,7 +102,7 @@ export function ConvertPanel({ upload, frame, projects, pick }: { upload: string
         )}
       </div>
 
-      <div className="border-t border-[#1c1c1c] p-4">
+      <div className="border-t border-[var(--kv-border)] p-4">
         <button type="button" onClick={convert} disabled={busy || !f?.flow} className={cn("lf-btn lf-btn-primary w-full justify-center", (busy || !f?.flow) && "pointer-events-none opacity-60")}>
           {busy ? <LoaderIcon className="size-4 animate-spin" aria-hidden /> : <AppWindowIcon className="size-4" aria-hidden />}
           {busy ? "Starting…" : "Convert from this frame"}
@@ -110,12 +110,12 @@ export function ConvertPanel({ upload, frame, projects, pick }: { upload: string
       </div>
 
       {earlier.length > 0 && (
-        <div className="border-t border-[#1c1c1c] p-4">
+        <div className="border-t border-[var(--kv-border)] p-4">
           <p className="text-[12px] font-medium text-foreground/80">Converted before</p>
           <ul className="mt-2 space-y-1">
             {earlier.map((p) => (
               <li key={p.id}>
-                <Link href={`/convert/${upload}/${p.id}`} className="group flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12.5px] transition-colors hover:bg-[#131313]">
+                <Link href={`/convert/${upload}/${p.id}`} className="group flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12.5px] transition-colors hover:bg-[var(--kv-bg)]">
                   <span className="min-w-0 flex-1 truncate font-mono">{p.projectName ?? p.name ?? "Project"}</span>
                   <span className={cn("shrink-0 text-[11px]", p.state === "failed" ? "text-destructive" : "text-muted-foreground")}>{p.state === "working" ? "converting…" : p.state === "failed" ? "failed" : ago(p.createdAt)}</span>
                   <ArrowRightIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
@@ -132,7 +132,7 @@ export function ConvertPanel({ upload, frame, projects, pick }: { upload: string
 function FlowRow({ icon: Icon, label, items }: { icon: typeof MonitorIcon; label: string; items: string[] }) {
   return (
     <li className="flex gap-2.5">
-      <Icon className={cn("mt-0.5 size-3.5 shrink-0", items.length ? "text-neutral-400" : "text-muted-foreground/50")} aria-hidden />
+      <Icon className={cn("mt-0.5 size-3.5 shrink-0", items.length ? "text-[var(--kv-text-muted)]" : "text-muted-foreground/50")} aria-hidden />
       <div className="min-w-0">
         <span className={items.length ? "text-foreground/90" : "text-muted-foreground"}>
           {label} <span className="font-mono text-[11px] text-muted-foreground">{items.length}</span>

@@ -4,7 +4,7 @@ import { useEffect, useEffectEvent, useState } from "react";
 
 /** Waits between polls: quick at first (most conversions take a second or two), then easing out to `ms`. */
 export function* pollDelays(ms: number): Generator<number, never> {
-  let delay = Math.min(ms, 250);
+  let delay = Math.min(ms, 200);
   for (;;) {
     yield delay;
     delay = Math.min(ms, delay * 1.3);

@@ -8,6 +8,7 @@ export const docsNav: Array<{ title: string; pages: DocPage[] }> = [
       { href: "/docs", title: "Overview" },
       { href: "/docs/export", title: "Getting your .fig" },
       { href: "/docs/convert", title: "Using the converter" },
+      { href: "/docs/hosting", title: "Hosting on Vercel" },
     ],
   },
   {
@@ -21,7 +22,10 @@ export const docsNav: Array<{ title: string; pages: DocPage[] }> = [
   },
   {
     title: "Fidelity",
-    pages: [{ href: "/docs/fidelity", title: "What Figflow reproduces" }],
+    pages: [
+      { href: "/docs/fidelity", title: "What Figflow reproduces" },
+      { href: "/docs/image-to-imgui", title: "Image vs .fig → ImGui" },
+    ],
   },
   {
     title: "Help",

@@ -284,6 +284,12 @@
       scrollbar-color: rgb(255 255 255 / 20%) transparent;
     }
   }
+
+  /* Monaco jump-to-control highlight (Code tab). */
+  .vscode-target-line {
+    background: rgb(0 119 230 / 18%) !important;
+    border-left: 2px solid #007acc;
+  }
   .text-brand-gradient {
     background: var(--brand-gradient-text);
     -webkit-background-clip: text;
@@ -385,8 +391,206 @@
   }
 }
 
+/* Keyvault-style app chrome (convert, dashboard, workspace shell) */
+.kv-app {
+  --kv-bg: #f4f5f7;
+  --kv-surface: #ffffff;
+  --kv-sidebar: #f7f8fa;
+  --kv-border: #e6e8ec;
+  --kv-border-subtle: #eceef2;
+  --kv-text: #333333;
+  --kv-text-subtle: #777777;
+  --kv-text-muted: #9a9a9a;
+  --kv-accent: #0077e6;
+  --kv-accent-soft: #e8f3fc;
+  --kv-accent-hover: #0066c7;
+  --kv-radius-card: 14px;
+  --kv-radius-control: 10px;
+  --kv-btn-h: 32px;
+  --background: var(--kv-bg);
+  --foreground: var(--kv-text);
+  --surface: var(--kv-surface);
+  --surface-2: var(--kv-bg);
+  --card: var(--kv-surface);
+  --card-foreground: var(--kv-text);
+  --popover: var(--kv-surface);
+  --popover-foreground: var(--kv-text);
+  --primary: var(--kv-accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--kv-bg);
+  --secondary-foreground: var(--kv-text);
+  --muted: var(--kv-bg);
+  --muted-foreground: var(--kv-text-subtle);
+  --accent: var(--kv-accent-soft);
+  --accent-foreground: var(--kv-text);
+  --destructive: #dc2626;
+  --border: var(--kv-border);
+  --input: var(--kv-border);
+  --ring: rgb(0 119 230 / 45%);
+  --brand: var(--kv-accent);
+  --brand-soft: var(--kv-accent);
+  --brand-label: var(--kv-accent);
+  color-scheme: light;
+  color: var(--kv-text);
+  font-family: var(--font-geist-sans), Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.kv-app .window {
+  --foreground: #f4f4f7;
+  --muted-foreground: #c0c0cb;
+  color: #f4f4f7;
+  color-scheme: dark;
+}
+.kv-app ::selection {
+  background: rgb(0 119 230 / 20%);
+  color: inherit;
+}
+
+.kv-app .kv-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media (min-width: 640px) {
+  .kv-app .kv-page-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+}
+.kv-app .kv-page-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--kv-text);
+}
+.kv-app .kv-page-subtitle {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--kv-text-subtle);
+}
+.kv-app .kv-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.kv-app .kv-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--kv-text);
+}
+.kv-app .kv-card,
+.kv-app .card {
+  border-radius: var(--kv-radius-card);
+  border: 1px solid var(--kv-border);
+  background: var(--kv-surface);
+  padding: 16px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+}
+.kv-app .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--kv-btn-h);
+  padding: 0 14px;
+  border-radius: var(--kv-radius-control);
+  background: var(--kv-accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  user-select: none;
+}
+.kv-app .btn-primary:hover {
+  background: var(--kv-accent-hover);
+}
+.kv-app .btn-primary:active {
+  background: #0058ad;
+}
+.kv-app .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--kv-btn-h);
+  padding: 0 12px;
+  border-radius: var(--kv-radius-control);
+  border: 1px solid var(--kv-border);
+  background: var(--kv-surface);
+  color: var(--kv-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+.kv-app .btn-secondary:hover {
+  background: var(--kv-bg);
+  border-color: #d5d8de;
+}
+.kv-app .btn-secondary:active {
+  background: var(--kv-border-subtle);
+}
+.kv-app .lf-btn {
+  height: var(--kv-btn-h);
+  border-radius: var(--kv-radius-control);
+  padding: 0 12px;
+  font-size: 13px;
+  transition: none;
+}
+.kv-app .lf-btn-primary {
+  color: #fff;
+  background: var(--kv-accent);
+  box-shadow: none;
+}
+.kv-app .lf-btn-primary:hover {
+  filter: none;
+  background: var(--kv-accent-hover);
+  box-shadow: none;
+}
+.kv-app .lf-btn-ghost {
+  color: var(--kv-text);
+  background: var(--kv-surface);
+  border: 1px solid var(--kv-border);
+}
+.kv-app .lf-btn-ghost:hover {
+  background: var(--kv-bg);
+  border-color: #d5d8de;
+}
+.kv-app .lf-btn:active {
+  transform: none;
+  filter: brightness(0.96);
+}
+.kv-app *,
+.kv-app *::before,
+.kv-app *::after {
+  transition-duration: 0ms !important;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"],
+  [role="option"],
+  [role="menuitem"],
+  [role="treeitem"],
+  a[href],
+  summary,
+  label[for],
+  select,
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="file"] {
+    cursor: pointer;
+  }
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
 /*
- * Reduced motion is handled per element rather than switched off wholesale:
  * scroll reveals and layout animations are toned down by MotionConfig (see
  * components/site/reveal.tsx), while short UI transitions and the slow
  * ambient motion (hero background, stack strip, which pauses on hover) play.

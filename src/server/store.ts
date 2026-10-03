@@ -1,25 +1,12 @@
 import "server-only";
-import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { decodeTime, isValid, ulid } from "ulid";
 import type { PageSummary } from "@/engine/fig/open";
 import { site } from "@/lib/site";
-import { writeFileAtomic } from "./atomic";
-import { closeDesign } from "./engine/pool";
+import { listNames, pathExists, readText, removeTree, writeBytes } from "./data/io";
 import type { ProjectManifest } from "./engine/protocol";
 import { uploadsDir } from "./paths";
-
-/**
- * Uploads and the projects made from them, on disk under .data/uploads:
- *
- *   <upload>/upload.json          the record below
- *   <upload>/design.fig           the file as uploaded
- *   <upload>/thumbs/<frame>.png   frame thumbnails
- *   <upload>/projects/<project>/  project.json, files/…, <Name>.zip, units/…
- *
- * Everything is deleted RETENTION_MS after the upload.
- */
 
 export const RETENTION_MS = site.retentionHours * 3_600_000;
 export const MAX_UPLOAD_BYTES = site.maxUploadMb * 1024 * 1024;
@@ -67,13 +54,14 @@ export function frameFromParam(param: string): string | null {
 export const frameParam = (frame: string) => frame.replace(":", "-");
 
 async function writeJson(path: string, value: unknown) {
-  // Write then rename: readers never see half a file.
-  await writeFileAtomic(path, JSON.stringify(value));
+  await writeBytes(path, JSON.stringify(value));
 }
 
 async function readJson<T>(path: string): Promise<T | null> {
+  const raw = await readText(path);
+  if (!raw) return null;
   try {
-    return JSON.parse(await readFile(path, "utf8")) as T;
+    return JSON.parse(raw) as T;
   } catch {
     return null;
   }
@@ -87,7 +75,7 @@ export async function createUpload(rec: UploadRecord): Promise<void> {
 }
 
 export async function saveUpload(rec: UploadRecord): Promise<void> {
-  if (!existsSync(uploadDir(rec.id))) return; // deleted meanwhile
+  if (!(await pathExists(uploadDir(rec.id)))) return;
   await writeJson(join(uploadDir(rec.id), "upload.json"), rec);
 }
 
@@ -99,36 +87,31 @@ export async function getUpload(id: string): Promise<UploadRecord | null> {
 
 /** Every live upload's record (for the storage limits). */
 export async function allUploads(): Promise<UploadRecord[]> {
-  let names: string[];
-  try {
-    names = await readdir(uploadsDir);
-  } catch {
-    return [];
-  }
+  const names = await listNames(uploadsDir);
   const recs = await Promise.all(names.filter(isId).map((id) => getUpload(id)));
   return recs.filter((r): r is UploadRecord => !!r);
 }
 
 export async function listUploads(owner: string): Promise<UploadRecord[]> {
-  let names: string[];
-  try {
-    names = await readdir(uploadsDir);
-  } catch {
-    return [];
-  }
+  const names = await listNames(uploadsDir);
   const recs = await Promise.all(names.filter(isId).map((id) => getUpload(id)));
   return recs.filter((r): r is UploadRecord => !!r && r.owner === owner).sort((a, b) => b.createdAt - a.createdAt);
 }
 
+async function releaseDesign(id: string) {
+  const { closeDesign } = await import("./engine/pool");
+  closeDesign(id);
+}
+
 export async function deleteUpload(id: string): Promise<void> {
   if (!isId(id)) return;
-  closeDesign(id);
-  await rm(uploadDir(id), { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+  await releaseDesign(id);
+  await removeTree(uploadDir(id));
 }
 
 export async function saveProject(rec: ProjectRecord): Promise<void> {
   const dir = projectDir(rec.upload, rec.id);
-  if (!existsSync(uploadDir(rec.upload))) return;
+  if (!(await pathExists(uploadDir(rec.upload)))) return;
   await mkdir(dir, { recursive: true });
   await writeJson(join(dir, "project.json"), rec);
 }
@@ -140,33 +123,23 @@ export async function getProject(upload: string, id: string): Promise<ProjectRec
 
 export async function listProjects(upload: string): Promise<ProjectRecord[]> {
   if (!isId(upload)) return [];
-  let names: string[];
-  try {
-    names = await readdir(join(uploadDir(upload), "projects"));
-  } catch {
-    return [];
-  }
+  const names = await listNames(join(uploadDir(upload), "projects"));
   const recs = await Promise.all(names.filter(isId).map((id) => getProject(upload, id)));
   return recs.filter((r): r is ProjectRecord => !!r).sort((a, b) => b.createdAt - a.createdAt);
 }
 
 /** Deletes every upload past its retention time. */
 export async function sweep(): Promise<number> {
-  let names: string[];
-  try {
-    names = await readdir(uploadsDir);
-  } catch {
-    return 0;
-  }
+  const names = await listNames(uploadsDir);
   let removed = 0;
   for (const id of names) {
+    if (!isId(id)) continue;
     const dir = uploadDir(id);
-    const rec = isId(id) ? await readJson<UploadRecord>(join(dir, "upload.json")) : null;
-    // No readable record: a failed upload, aged by its id's timestamp.
-    const created = rec?.createdAt ?? (isId(id) ? decodeTime(id) : 0);
+    const rec = await readJson<UploadRecord>(join(dir, "upload.json"));
+    const created = rec?.createdAt ?? decodeTime(id);
     if (!expired(created)) continue;
-    closeDesign(id);
-    await rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }).catch(() => undefined);
+    await releaseDesign(id);
+    await removeTree(dir);
     removed++;
   }
   return removed;

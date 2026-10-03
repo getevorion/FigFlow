@@ -1,7 +1,6 @@
 import "server-only";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 /**
  * The repository root: the folder whose package.json is named "figflow".
@@ -11,11 +10,6 @@ import { fileURLToPath } from "node:url";
 function findRoot(): string {
   if (process.env.FIGFLOW_ROOT) return resolve(process.env.FIGFLOW_ROOT);
   const starts: string[] = [];
-  try {
-    starts.push(dirname(fileURLToPath(import.meta.url)));
-  } catch {
-    // not a file: URL once bundled; the other starts cover it
-  }
   if (process.argv[1]) starts.push(dirname(process.argv[1]));
   starts.push(process.cwd());
   for (const start of starts) {
@@ -35,7 +29,13 @@ function findRoot(): string {
 }
 
 export const root = findRoot();
-export const dataDir = join(root, ".data");
+
+/** Local data root. On Vercel defaults to `/tmp/figflow-data` unless `FIGFLOW_DATA_DIR` is set. */
+export const dataDir = process.env.FIGFLOW_DATA_DIR
+  ? resolve(process.env.FIGFLOW_DATA_DIR)
+  : process.env.VERCEL
+    ? join("/tmp", "figflow-data")
+    : join(root, ".data");
 export const uploadsDir = join(dataDir, "uploads");
 export const fontCacheDir = join(dataDir, "font-cache");
 export const runtimeDir = join(root, "runtime");

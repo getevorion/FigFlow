@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { ChevronRightIcon, MenuIcon, XIcon } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
-import { nav } from "@/lib/site";
+import { nav, productNav } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
 /**
@@ -75,6 +75,21 @@ export function SiteHeader() {
           })}
         </nav>
 
+        <div className="hidden items-center gap-2 justify-self-end md:flex">
+          {productNav.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-[13px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                item.href === "/convert" ? "lf-btn lf-btn-primary lf-btn-sm" : "text-foreground/70 hover:text-white",
+              )}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+
         <button
           type="button"
           className="grid size-9 place-items-center rounded-lg text-foreground/80 transition-colors hover:bg-white/5 hover:text-white md:hidden"
@@ -98,6 +113,17 @@ export function SiteHeader() {
             className="overflow-hidden border-t border-white/[0.08] md:hidden"
           >
             <nav className="mx-auto flex max-w-6xl flex-col px-3 py-2" aria-label="Mobile">
+              {productNav.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className="flex items-center justify-between rounded-lg px-2 py-3 text-[14px] font-medium text-white"
+                >
+                  {item.label}
+                  <ChevronRightIcon className="size-4 text-muted-foreground" />
+                </Link>
+              ))}
               {nav.map((item) => (
                 <Link
                   key={item.href}

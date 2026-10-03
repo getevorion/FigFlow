@@ -3,7 +3,18 @@ import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import { root, workerScript } from "../paths";
+import { LIMITS } from "./limits";
 import type { WorkerReply, WorkerRequest, WorkerResult } from "./protocol";
+
+export { LIMITS };
+
+const useInlineEngine =
+  process.env.FIGFLOW_ENGINE === "worker"
+    ? false
+    : process.env.FIGFLOW_ENGINE === "inline" ||
+      process.env.NODE_ENV === "development" ||
+      process.env.VERCEL === "1" ||
+      process.env.NEXT_PHASE === "phase-production-build";
 
 /**
  * The engine workers: one process per open upload (worker.ts), kept while it's
@@ -20,9 +31,6 @@ const SPARE = process.env.FIGFLOW_SPARE_WORKER !== "0";
 const SPARE_MAX_AGE = process.env.NODE_ENV === "production" ? Infinity : 60_000;
 const IDLE_MS = 5 * 60_000;
 const HEAP_MB = Number(process.env.FIGFLOW_WORKER_HEAP_MB ?? 4096);
-
-/** Time limits per request, in ms. */
-export const LIMITS = { open: 120_000, thumb: 60_000, flow: 60_000, generate: 300_000, preview: 120_000, pick: 120_000 } as const;
 
 /** Which waiting request runs next: lower first, in arrival order (thumbnails wait for everything else). */
 const PRIORITY = { open: 0, pick: 0, flow: 1, generate: 1, preview: 1, thumb: 2 } as const;
@@ -141,17 +149,19 @@ function wakeWaiters() {
   for (const w of waiters) w();
 }
 
-// Replaced when the dev server reloads this module, so the timer runs the current code.
-if (state.reaper) clearInterval(state.reaper);
-state.reaper = setInterval(() => {
-  const now = Date.now();
-  for (const w of state.workers.values()) if (w.active === 0 && now - w.lastUsed > IDLE_MS) w.kill();
-  if (state.spare && now - state.spare.born > SPARE_MAX_AGE) {
-    state.spare.kill();
-    warmEngine();
-  }
-}, 60_000);
-state.reaper.unref?.();
+function startReaper() {
+  if (useInlineEngine || state.reaper) return;
+  if (state.reaper) clearInterval(state.reaper);
+  state.reaper = setInterval(() => {
+    const now = Date.now();
+    for (const w of state.workers.values()) if (w.active === 0 && now - w.lastUsed > IDLE_MS) w.kill();
+    if (state.spare && now - state.spare.born > SPARE_MAX_AGE) {
+      state.spare.kill();
+      warmEngine();
+    }
+  }, 60_000);
+  state.reaper.unref?.();
+}
 
 /** A worker with `path` open for `key`: the running one, or a new one once there's room. */
 async function workerFor(key: string, path: string): Promise<EngineWorker> {
@@ -187,22 +197,33 @@ async function workerFor(key: string, path: string): Promise<EngineWorker> {
 
 /** Starts the spare worker if there isn't one (at server start, and after each is put to use). */
 export function warmEngine() {
+  if (useInlineEngine) return;
+  startReaper();
   if (SPARE && (!state.spare || state.spare.dead)) state.spare = new EngineWorker("");
+}
+
+async function inline() {
+  return import("./inline");
 }
 
 /** Runs one engine request on the design `path` (the upload `key`'s file). */
 export async function engine<K extends Exclude<Op, "open">>(key: string, path: string, op: K, args: Args<K>): Promise<WorkerResult[K]> {
+  if (useInlineEngine) return (await inline()).inlineEngine(key, path, op, args);
+  startReaper();
   const w = await workerFor(key, path);
   return w.call(op, args, LIMITS[op]);
 }
 
 /** Opens the design (parsing it) and returns its pages. */
 export async function openDesign(key: string, path: string): Promise<WorkerResult["open"]> {
+  if (useInlineEngine) return (await inline()).inlineOpenDesign(key, path);
+  startReaper();
   const w = await workerFor(key, path);
   return w.opened!;
 }
 
 /** Stops the upload's worker, if it has one (before its files are deleted). */
 export function closeDesign(key: string) {
-  state.workers.get(key)?.kill();
+  if (useInlineEngine) void inline().then((m) => m.inlineCloseDesign(key));
+  else state.workers.get(key)?.kill();
 }

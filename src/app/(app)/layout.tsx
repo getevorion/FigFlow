@@ -1,15 +1,11 @@
 import type { Metadata } from "next";
+import { AppShell } from "@/components/app/app-shell";
 
 export const metadata: Metadata = {
-  title: "Convert",
+  title: "App",
   robots: { index: false },
 };
 
-/** The converter's shell: flat black; each page renders its own header. */
 export default function AppLayout({ children }: LayoutProps<"/">) {
-  return (
-    <div className="relative isolate flex min-h-dvh flex-col bg-black">
-      {children}
-    </div>
-  );
+  return <AppShell>{children}</AppShell>;
 }
